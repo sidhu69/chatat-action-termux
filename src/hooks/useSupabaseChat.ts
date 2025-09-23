@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ChatRoom, Message, User, Participant } from '@/types/chat';
 import { useToast } from '@/hooks/use-toast';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 // Define the presence state type
 interface PresenceState {
@@ -15,7 +16,7 @@ export const useSupabaseChat = () => {
   const [currentRoom, setCurrentRoom] = useState<ChatRoom | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomParticipants, setRoomParticipants] = useState<{[key: string]: Participant[]}>({});
-  const [presenceChannels, setPresenceChannels] = useState<{[key: string]: any}>({});
+  const [presenceChannels, setPresenceChannels] = useState<{[key: string]: RealtimeChannel}>({});
   const { toast } = useToast();
 
   // Track participants for a room with better real-time updates
