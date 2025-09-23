@@ -71,22 +71,13 @@ jobs:
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
+        name: app-debug-apk
         path: android/app/build/outputs/apk/debug/app-debug.apk
         retention-days: 30
 
-    - name: Create Release
-      if: github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ github.run_number }}
-        name: Release v${{ github.run_number }}
-        body: |
-          Automated release from GitHub Actions
-          Changes in this release:
-          ${{ github.event.head_commit.message }}
-        draft: false
-        prerelease: false
-        files: android/app/build/outputs/apk/debug/app-debug.apk
+    - name: Build success notification
+      if: success()
+      run: |
+        echo "✅ Android APK built successfully!"
+        echo "📱 APK available as artifact: app-debug-apk"
+        echo "📂 Location: android/app/build/outputs/apk/debug/app-debug.apk"
