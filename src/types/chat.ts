@@ -13,6 +13,13 @@ export interface Message {
   type: 'text' | 'system';
 }
 
+export interface Participant {
+  id: string;
+  username: string;
+  joinedAt: Date;
+  isActive: boolean;
+}
+
 export interface ChatRoom {
   id: string;
   code: string;
@@ -20,7 +27,8 @@ export interface ChatRoom {
   description?: string;
   type: 'private' | 'public';
   createdBy: string;
-  participants: User[];
+  participants: Participant[];
+  activeParticipantCount: number;
   messages: Message[];
   createdAt: Date;
 }
