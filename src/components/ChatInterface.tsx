@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { 
-  ArrowLeft, 
-  Send, 
-  Users, 
-  Copy, 
+import {
+  ArrowLeft,
+  Send,
+  Users,
+  Copy,
   MoreVertical,
-  Hash
+  Hash,
+  Circle
 } from 'lucide-react';
 import { useChat } from '@/contexts/ChatContext';
 import { Message } from '@/types/chat';
@@ -21,6 +22,14 @@ export const ChatInterface = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { state, dispatch, supabaseChat } = useChat();
 
+  // Get current room participants from the main chat hook
+  const currentRoomParticipants = supabaseChat.currentRoom 
+    ? supabaseChat.roomParticipants[supabaseChat.currentRoom.id] || []
+    : [];
+  
+  const participantCount = currentRoomParticipants.length;
+  const onlineUsers = currentRoomParticipants.map(p => p.username);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -29,23 +38,30 @@ export const ChatInterface = () => {
     scrollToBottom();
   }, [supabaseChat.currentRoom?.messages]);
 
+  // Debug logging
+  useEffect(() => {
+    if (supabaseChat.currentRoom) {
+      console.log('Current room participants:', currentRoomParticipants);
+      console.log('Participant count:', participantCount);
+    }
+  }, [currentRoomParticipants, participantCount, supabaseChat.currentRoom]);
+
   const handleSendMessage = async () => {
     if (!message.trim() || !supabaseChat.currentRoom || !state.currentUser) return;
 
     const success = await supabaseChat.sendMessage(
-      message.trim(), 
-      state.currentUser, 
+      message.trim(),
+      state.currentUser,
       supabaseChat.currentRoom.id
     );
-    
+
     if (success) {
       setMessage('');
     }
   };
 
   const handleLeaveRoom = () => {
-    supabaseChat.setCurrentRoom(null);
-    supabaseChat.setIsConnected(false);
+    supabaseChat.setCurrentRoom();
     toast({
       title: "Left room",
       description: "You have left the chat room",
@@ -76,9 +92,9 @@ export const ChatInterface = () => {
       {/* Header */}
       <div className="bg-card border-b border-border/50 p-4 flex items-center justify-between backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={handleLeaveRoom}
             className="hover:bg-secondary"
           >
@@ -88,7 +104,12 @@ export const ChatInterface = () => {
             <h2 className="font-bold text-lg">{supabaseChat.currentRoom.name}</h2>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="w-4 h-4" />
-              {supabaseChat.currentRoom.participants.length} participants
+              <div className="flex items-center gap-1">
+                <Circle className="w-2 h-2 fill-green-500 text-green-500" />
+                <span className="font-medium text-foreground">
+                  {participantCount} online
+                </span>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -102,10 +123,18 @@ export const ChatInterface = () => {
             </div>
           </div>
         </div>
-        
-        <Button variant="ghost" size="icon" className="hover:bg-secondary">
-          <MoreVertical className="w-5 h-5" />
-        </Button>
+
+        {/* Show online users tooltip */}
+        <div className="flex items-center gap-2">
+          {participantCount > 0 && (
+            <Badge variant="secondary" className="bg-green-500/20 text-green-700 border-green-500/30 max-w-48 truncate">
+              {onlineUsers.join(', ')}
+            </Badge>
+          )}
+          <Button variant="ghost" size="icon" className="hover:bg-secondary">
+            <MoreVertical className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -127,23 +156,34 @@ export const ChatInterface = () => {
           return (
             <div key={msg.id} className={`flex gap-3 ${isOwn ? 'justify-end' : 'justify-start'}`}>
               {!isOwn && (
-                <Avatar className="w-8 h-8 border-2 border-border/50">
-                  <AvatarFallback className="bg-primary/20 text-primary font-semibold text-sm">
-                    {msg.username.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar className="w-8 h-8 border-2 border-border/50">
+                    <AvatarFallback className="bg-primary/20 text-primary font-semibold text-sm">
+                      {msg.username.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Show online indicator if user is online */}
+                  {onlineUsers.includes(msg.username) && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
+                  )}
+                </div>
               )}
-              
+
               <div className={`max-w-[70%] ${isOwn ? 'order-first' : ''}`}>
                 {!isOwn && (
-                  <p className="text-xs text-muted-foreground mb-1 font-medium">
-                    {msg.username}
-                  </p>
+                  <div className="flex items-center gap-1 mb-1">
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {msg.username}
+                    </p>
+                    {onlineUsers.includes(msg.username) && (
+                      <Circle className="w-2 h-2 fill-green-500 text-green-500" />
+                    )}
+                  </div>
                 )}
                 <div className={`
                   p-3 rounded-2xl backdrop-blur-xl
-                  ${isOwn 
-                    ? 'bg-chat-bubble-own text-primary-foreground ml-auto' 
+                  ${isOwn
+                    ? 'bg-chat-bubble-own text-primary-foreground ml-auto'
                     : 'bg-chat-bubble-other text-foreground'
                   }
                 `}>
@@ -155,11 +195,14 @@ export const ChatInterface = () => {
               </div>
 
               {isOwn && (
-                <Avatar className="w-8 h-8 border-2 border-primary/50">
-                  <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
-                    {msg.username.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar className="w-8 h-8 border-2 border-primary/50">
+                    <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
+                      {msg.username.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
+                </div>
               )}
             </div>
           );
@@ -196,7 +239,7 @@ export const ChatInterface = () => {
             className="flex-1 bg-background/50 border-border/50 focus:bg-background transition-all duration-300"
             maxLength={500}
           />
-          <Button 
+          <Button
             onClick={handleSendMessage}
             disabled={!message.trim()}
             className="bg-gradient-primary hover:opacity-90 transition-all duration-300"
