@@ -3,35 +3,83 @@ import { supabase } from '@/lib/supabase';
 import { ChatRoom, Message, User, Participant } from '@/types/chat';
 import { useToast } from '@/hooks/use-toast';
 
+// Define the presence state type
+interface PresenceState {
+  user_id: string;
+  username: string;
+  joined_at: string;
+}
+
 export const useSupabaseChat = () => {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [currentRoom, setCurrentRoom] = useState<ChatRoom | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomParticipants, setRoomParticipants] = useState<{[key: string]: Participant[]}>({});
+  const [presenceChannels, setPresenceChannels] = useState<{[key: string]: any}>({});
   const { toast } = useToast();
 
-  // Track participants for a room
-  const trackRoomParticipants = useCallback((roomId: string) => {
+  // Track participants for a room with better real-time updates
+  const trackRoomParticipants = useCallback((roomId: string, user?: User) => {
+    // Don't create multiple channels for the same room
+    if (presenceChannels[roomId]) {
+      return presenceChannels[roomId];
+    }
+
     const channel = supabase
       .channel(`room-presence:${roomId}`)
       .on('presence', { event: 'sync' }, () => {
         const newState = channel.presenceState();
-        const participantList = Object.values(newState).flat().map((presence: any) => ({
+        const participantList = Object.values(newState).flat().map((presence: PresenceState) => ({
           id: presence.user_id,
           username: presence.username,
           joinedAt: new Date(presence.joined_at),
           isActive: true,
         }));
-        
+
         setRoomParticipants(prev => ({
           ...prev,
           [roomId]: participantList
         }));
-      })
-      .subscribe();
 
+        console.log(`Room ${roomId} participants updated:`, participantList.length);
+      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        console.log('User joined room:', newPresences);
+      })
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        console.log('User left room:', leftPresences);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED' && user) {
+          // Track current user's presence
+          await channel.track({
+            user_id: user.id,
+            username: user.username,
+            joined_at: new Date().toISOString(),
+          });
+          console.log(`User ${user.username} tracking presence in room ${roomId}`);
+        }
+      });
+
+    setPresenceChannels(prev => ({ ...prev, [roomId]: channel }));
     return channel;
-  }, []);
+  }, [presenceChannels]);
+
+  // Enhanced function to update current room participants in real-time
+  const updateCurrentRoomParticipants = useCallback(() => {
+    if (currentRoom && roomParticipants[currentRoom.id]) {
+      setCurrentRoom(prev => prev ? {
+        ...prev,
+        participants: roomParticipants[currentRoom.id],
+        activeParticipantCount: roomParticipants[currentRoom.id].length,
+      } : null);
+    }
+  }, [currentRoom, roomParticipants]);
+
+  // Update current room participants when they change
+  useEffect(() => {
+    updateCurrentRoomParticipants();
+  }, [updateCurrentRoomParticipants]);
 
   // Fetch all public rooms with participant counts
   const fetchPublicRooms = useCallback(async () => {
@@ -56,11 +104,11 @@ export const useSupabaseChat = () => {
             console.error('Error fetching messages:', messagesError);
           }
 
-          // Track participants for this room
+          // Track participants for this room (without user tracking for public rooms)
           trackRoomParticipants(room.id);
 
           const participants = roomParticipants[room.id] || [];
-          
+
           return {
             id: room.id,
             name: room.name,
@@ -82,14 +130,7 @@ export const useSupabaseChat = () => {
         })
       );
 
-      // Filter out rooms with 0 active participants
-      const activeRooms = roomsWithMessages.filter(room => {
-        // Always show rooms if we don't have participant data yet, or if they have participants
-        const participants = roomParticipants[room.id];
-        return !participants || participants.length > 0;
-      });
-
-      setRooms(activeRooms);
+      setRooms(roomsWithMessages);
     } catch (error) {
       console.error('Error fetching rooms:', error);
       toast({
@@ -102,15 +143,12 @@ export const useSupabaseChat = () => {
 
   // Update room participant counts when participants change
   useEffect(() => {
-    setRooms(prevRooms => 
+    setRooms(prevRooms =>
       prevRooms.map(room => ({
         ...room,
         participants: roomParticipants[room.id] || [],
         activeParticipantCount: (roomParticipants[room.id] || []).length,
-      })).filter(room => 
-        // Hide public rooms with 0 participants
-        room.type === 'private' || room.activeParticipantCount > 0
-      )
+      }))
     );
   }, [roomParticipants]);
 
@@ -165,14 +203,14 @@ export const useSupabaseChat = () => {
       console.error('Full error details:', error);
       toast({
         title: "Error",
-        description: `Failed to create room: ${error.message || 'Unknown error'}`,
+        description: `Failed to create room: ${(error as Error).message || 'Unknown error'}`,
         variant: "destructive",
       });
       return null;
     }
   }, [toast]);
 
-  // Join a room by code
+  // Join a room by code with proper presence tracking
   const joinRoom = useCallback(async (code: string, user?: User) => {
     try {
       const { data, error } = await supabase
@@ -224,9 +262,9 @@ export const useSupabaseChat = () => {
       setCurrentRoom(room);
       setIsConnected(true);
 
-      // Start tracking presence for this room
+      // Start tracking presence for this room with the current user
       if (user) {
-        trackRoomParticipants(room.id);
+        trackRoomParticipants(room.id, user);
       }
 
       return room;
@@ -268,6 +306,25 @@ export const useSupabaseChat = () => {
       return false;
     }
   }, [toast]);
+
+  // Enhanced leave room function to properly cleanup presence
+  const leaveRoom = useCallback(() => {
+    if (currentRoom && presenceChannels[currentRoom.id]) {
+      // Untrack presence and remove channel
+      presenceChannels[currentRoom.id].untrack();
+      supabase.removeChannel(presenceChannels[currentRoom.id]);
+      
+      // Remove from presence channels
+      setPresenceChannels(prev => {
+        const newChannels = { ...prev };
+        delete newChannels[currentRoom.id];
+        return newChannels;
+      });
+    }
+
+    setCurrentRoom(null);
+    setIsConnected(false);
+  }, [currentRoom, presenceChannels]);
 
   // Set up realtime subscription for current room
   useEffect(() => {
@@ -311,6 +368,16 @@ export const useSupabaseChat = () => {
     fetchPublicRooms();
   }, [fetchPublicRooms]);
 
+  // Cleanup all presence channels on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(presenceChannels).forEach(channel => {
+        channel.untrack();
+        supabase.removeChannel(channel);
+      });
+    };
+  }, [presenceChannels]);
+
   return {
     rooms,
     currentRoom,
@@ -318,7 +385,7 @@ export const useSupabaseChat = () => {
     createRoom,
     joinRoom: (code: string) => joinRoom(code),
     sendMessage,
-    setCurrentRoom,
+    setCurrentRoom: leaveRoom, // Use enhanced leave room function
     setIsConnected,
     fetchPublicRooms,
     roomParticipants,
