@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ChatRoom, Message, User, Participant } from '@/types/chat';
 import { useToast } from '@/hooks/use-toast';
@@ -20,11 +20,14 @@ export const useSupabaseChat = () => {
   const [messageChannels, setMessageChannels] = useState<{[key: string]: RealtimeChannel}>({});
   const { toast } = useToast();
 
+  // Memoize currentRoom.id to avoid unnecessary re-renders
+  const currentRoomId = useMemo(() => currentRoom?.id, [currentRoom?.id]);
+
   // Auto-cleanup empty public rooms
   const cleanupEmptyRooms = useCallback(async () => {
     try {
       console.log('Starting empty room cleanup check...');
-      
+
       // Get all public rooms
       const { data: publicRooms, error } = await supabase
         .from('chat_rooms')
@@ -40,15 +43,15 @@ export const useSupabaseChat = () => {
 
       // Check each room for participants
       const roomsToDelete: string[] = [];
-      
+
       for (const room of publicRooms) {
         const participants = roomParticipants[room.id] || [];
         const hasParticipants = participants.length > 0;
-        
+
         // Only delete rooms that are older than 5 minutes and have no participants
         const roomAge = Date.now() - new Date(room.created_at).getTime();
         const isOldEnough = roomAge > 5 * 60 * 1000; // 5 minutes
-        
+
         if (!hasParticipants && isOldEnough) {
           console.log(`Marking room ${room.name} (${room.code}) for deletion - no participants and older than 5 minutes`);
           roomsToDelete.push(room.id);
@@ -66,7 +69,7 @@ export const useSupabaseChat = () => {
           .from('messages')
           .delete()
           .eq('room_id', roomId);
-        
+
         if (messagesError) {
           console.error(`Error deleting messages for room ${roomId}:`, messagesError);
         }
@@ -87,7 +90,7 @@ export const useSupabaseChat = () => {
 
       // Update local state to remove deleted rooms
       setRooms(prevRooms => prevRooms.filter(room => !roomsToDelete.includes(room.id)));
-      
+
       // Clean up local participant tracking for deleted rooms
       setRoomParticipants(prev => {
         const updated = { ...prev };
@@ -123,7 +126,7 @@ export const useSupabaseChat = () => {
       .on('presence', { event: 'sync' }, () => {
         const newState = channel.presenceState();
         console.log('Raw presence state:', newState);
-        
+
         const participantList = Object.entries(newState).map(([key, presences]) => {
           const presence = Array.isArray(presences) ? presences[0] : presences;
           return {
@@ -146,7 +149,7 @@ export const useSupabaseChat = () => {
       })
       .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
         console.log('User left room:', key, leftPresences);
-        
+
         // Trigger cleanup check when someone leaves
         setTimeout(() => {
           cleanupEmptyRooms();
@@ -162,7 +165,7 @@ export const useSupabaseChat = () => {
             joined_at: new Date().toISOString(),
           });
           console.log(`User ${user.username} tracking result:`, trackResult);
-          
+
           // Force immediate sync after tracking
           setTimeout(() => {
             const currentState = channel.presenceState();
@@ -231,9 +234,10 @@ export const useSupabaseChat = () => {
   }, [messageChannels]);
 
   // Update current room participants when roomParticipants changes
+  // FIXED: Added currentRoom to dependencies and used memoized currentRoomId
   useEffect(() => {
-    if (currentRoom && roomParticipants[currentRoom.id]) {
-      const updatedParticipants = roomParticipants[currentRoom.id];
+    if (currentRoomId && roomParticipants[currentRoomId]) {
+      const updatedParticipants = roomParticipants[currentRoomId];
       console.log(`Updating current room participants:`, updatedParticipants);
       setCurrentRoom(prev => prev ? {
         ...prev,
@@ -241,7 +245,7 @@ export const useSupabaseChat = () => {
         activeParticipantCount: updatedParticipants.length,
       } : null);
     }
-  }, [roomParticipants, currentRoom?.id]);
+  }, [roomParticipants, currentRoomId]); // Fixed: Added currentRoomId to dependencies
 
   // Fetch all public rooms with participant counts
   const fetchPublicRooms = useCallback(async () => {
