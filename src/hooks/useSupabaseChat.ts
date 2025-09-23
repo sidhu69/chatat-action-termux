@@ -77,7 +77,7 @@ export const useSupabaseChat = () => {
   const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
     try {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      
+
       const { data, error } = await supabase
         .from('chat_rooms')
         .insert({
@@ -249,7 +249,7 @@ export const useSupabaseChat = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentRoom?.id]);
+  }, [currentRoom]);
 
   // Initialize public rooms on mount
   useEffect(() => {
