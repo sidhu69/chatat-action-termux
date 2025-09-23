@@ -1,420 +1,253 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import { ChatRoom, Message, User, Participant } from '@/types/chat';
-import { useToast } from '@/hooks/use-toast';
-import { RealtimeChannel } from '@supabase/supabase-js';
+import { useState, useRef, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  ArrowLeft,
+  Send,
+  Users,
+  Copy,
+  MoreVertical,
+  Hash,
+  Circle
+} from 'lucide-react';
+import { useChat } from '@/contexts/ChatContext';
+import { Message } from '@/types/chat';
+import { toast } from '@/hooks/use-toast';
 
-// Define the presence state type
-interface PresenceState {
-  user_id: string;
-  username: string;
-  joined_at: string;
-}
+export const ChatInterface = () => {
+  const [message, setMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { state, dispatch, supabaseChat } = useChat();
 
-export const useSupabaseChat = () => {
-  const [rooms, setRooms] = useState<ChatRoom[]>([]);
-  const [currentRoom, setCurrentRoom] = useState<ChatRoom | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [roomParticipants, setRoomParticipants] = useState<{[key: string]: Participant[]}>({});
-  const [presenceChannels, setPresenceChannels] = useState<{[key: string]: RealtimeChannel}>({});
-  const { toast } = useToast();
+  // Get current room participants from the main chat hook
+  const currentRoomParticipants = supabaseChat.currentRoom 
+    ? supabaseChat.roomParticipants[supabaseChat.currentRoom.id] || []
+    : [];
+  
+  const participantCount = currentRoomParticipants.length;
+  const onlineUsers = currentRoomParticipants.map(p => p.username);
 
-  // Track participants for a room with better real-time updates
-  const trackRoomParticipants = useCallback((roomId: string, user?: User) => {
-    // Don't create multiple channels for the same room
-    if (presenceChannels[roomId]) {
-      console.log(`Presence channel already exists for room ${roomId}`);
-      return presenceChannels[roomId];
-    }
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-    console.log(`Setting up presence tracking for room ${roomId}`, user ? `with user ${user.username}` : 'without user');
-
-    const channel = supabase
-      .channel(`room-presence:${roomId}`)
-      .on('presence', { event: 'sync' }, () => {
-        const newState = channel.presenceState();
-        const participantList = Object.values(newState).flat().map((presence: PresenceState) => ({
-          id: presence.user_id,
-          username: presence.username,
-          joinedAt: new Date(presence.joined_at),
-          isActive: true,
-        }));
-
-        console.log(`Presence sync for room ${roomId}:`, participantList);
-
-        setRoomParticipants(prev => ({
-          ...prev,
-          [roomId]: participantList
-        }));
-      })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        console.log('User joined room:', newPresences);
-      })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        console.log('User left room:', leftPresences);
-      })
-      .subscribe(async (status) => {
-        console.log(`Presence subscription status for room ${roomId}:`, status);
-        if (status === 'SUBSCRIBED' && user) {
-          const trackResult = await channel.track({
-            user_id: user.id,
-            username: user.username,
-            joined_at: new Date().toISOString(),
-          });
-          console.log(`User ${user.username} tracking result:`, trackResult);
-        }
-      });
-
-    setPresenceChannels(prev => ({ ...prev, [roomId]: channel }));
-    return channel;
-  }, [presenceChannels]);
-
-  // Update current room participants when roomParticipants changes
   useEffect(() => {
-    if (currentRoom && roomParticipants[currentRoom.id]) {
-      const updatedParticipants = roomParticipants[currentRoom.id];
-      setCurrentRoom(prev => prev ? {
-        ...prev,
-        participants: updatedParticipants,
-        activeParticipantCount: updatedParticipants.length,
-      } : null);
+    scrollToBottom();
+  }, [supabaseChat.currentRoom?.messages]);
+
+  // Debug logging
+  useEffect(() => {
+    if (supabaseChat.currentRoom) {
+      console.log('Current room participants:', currentRoomParticipants);
+      console.log('Participant count:', participantCount);
     }
-  }, [roomParticipants, currentRoom?.id]);
+  }, [currentRoomParticipants, participantCount, supabaseChat.currentRoom]);
 
-  // Fetch all public rooms with participant counts
-  const fetchPublicRooms = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('chat_rooms')
-        .select('*')
-        .eq('is_public', true)
-        .order('created_at', { ascending: false });
+  const handleSendMessage = async () => {
+    if (!message.trim() || !supabaseChat.currentRoom || !state.currentUser) return;
 
-      if (error) throw error;
+    const success = await supabaseChat.sendMessage(
+      message.trim(),
+      state.currentUser,
+      supabaseChat.currentRoom.id
+    );
 
-      const roomsWithMessages = await Promise.all(
-        (data || []).map(async (room) => {
-          const { data: messages, error: messagesError } = await supabase
-            .from('messages')
-            .select('*')
-            .eq('room_id', room.id)
-            .order('created_at', { ascending: true });
+    if (success) {
+      setMessage('');
+    }
+  };
 
-          if (messagesError) {
-            console.error('Error fetching messages:', messagesError);
+  const handleLeaveRoom = () => {
+    supabaseChat.setCurrentRoom();
+    toast({
+      title: "Left room",
+      description: "You have left the chat room",
+    });
+  };
+
+  const copyRoomCode = () => {
+    if (supabaseChat.currentRoom) {
+      navigator.clipboard.writeText(supabaseChat.currentRoom.code);
+      toast({
+        title: "Room code copied!",
+        description: "Share this code with others to invite them",
+      });
+    }
+  };
+
+  const formatTime = (date: Date) => {
+    return new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  };
+
+  if (!supabaseChat.currentRoom) return null;
+
+  return (
+    <div className="h-screen flex flex-col bg-background">
+      {/* Header */}
+      <div className="bg-card border-b border-border/50 p-4 flex items-center justify-between backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLeaveRoom}
+            className="hover:bg-secondary"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h2 className="font-bold text-lg">{supabaseChat.currentRoom.name}</h2>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users className="w-4 h-4" />
+              <div className="flex items-center gap-1">
+                <Circle className="w-2 h-2 fill-green-500 text-green-500" />
+                <span className="font-medium text-foreground">
+                  {participantCount} online
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={copyRoomCode}
+                className="h-6 px-2 text-xs bg-primary/20 text-primary hover:bg-primary/30"
+              >
+                <Hash className="w-3 h-3 mr-1" />
+                {supabaseChat.currentRoom.code}
+                <Copy className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Show online users tooltip */}
+        <div className="flex items-center gap-2">
+          {participantCount > 0 && (
+            <Badge variant="secondary" className="bg-green-500/20 text-green-700 border-green-500/30 max-w-48 truncate">
+              {onlineUsers.join(', ')}
+            </Badge>
+          )}
+          <Button variant="ghost" size="icon" className="hover:bg-secondary">
+            <MoreVertical className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-secondary/30">
+        {supabaseChat.currentRoom.messages.map((msg) => {
+          const isOwn = msg.userId === state.currentUser?.id;
+          const isSystem = msg.type === 'system';
+
+          if (isSystem) {
+            return (
+              <div key={msg.id} className="text-center">
+                <Badge variant="secondary" className="bg-secondary/50 text-muted-foreground">
+                  {msg.content}
+                </Badge>
+              </div>
+            );
           }
 
-          const participants = roomParticipants[room.id] || [];
+          return (
+            <div key={msg.id} className={`flex gap-3 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+              {!isOwn && (
+                <div className="relative">
+                  <Avatar className="w-8 h-8 border-2 border-border/50">
+                    <AvatarFallback className="bg-primary/20 text-primary font-semibold text-sm">
+                      {msg.username.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Show online indicator if user is online */}
+                  {onlineUsers.includes(msg.username) && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
+                  )}
+                </div>
+              )}
 
-          return {
-            id: room.id,
-            name: room.name,
-            code: room.code,
-            type: (room.is_public ? 'public' : 'private') as 'public' | 'private',
-            createdBy: room.created_by,
-            participants,
-            activeParticipantCount: participants.length,
-            messages: (messages || []).map((msg): Message => ({
-              id: msg.id,
-              content: msg.content,
-              username: msg.username,
-              userId: msg.user_id,
-              timestamp: new Date(msg.created_at),
-              type: 'text',
-            })),
-            createdAt: new Date(room.created_at),
-          };
-        })
-      );
+              <div className={`max-w-[70%] ${isOwn ? 'order-first' : ''}`}>
+                {!isOwn && (
+                  <div className="flex items-center gap-1 mb-1">
+                    <p className="text-xs text-muted-foreground font-medium">
+                      {msg.username}
+                    </p>
+                    {onlineUsers.includes(msg.username) && (
+                      <Circle className="w-2 h-2 fill-green-500 text-green-500" />
+                    )}
+                  </div>
+                )}
+                <div className={`
+                  p-3 rounded-2xl backdrop-blur-xl
+                  ${isOwn
+                    ? 'bg-chat-bubble-own text-primary-foreground ml-auto'
+                    : 'bg-chat-bubble-other text-foreground'
+                  }
+                `}>
+                  <p className="text-sm">{msg.content}</p>
+                  <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                    {formatTime(msg.timestamp)}
+                  </p>
+                </div>
+              </div>
 
-      setRooms(roomsWithMessages);
-    } catch (error) {
-      console.error('Error fetching rooms:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch chat rooms",
-        variant: "destructive",
-      });
-    }
-  }, [toast, roomParticipants]);
+              {isOwn && (
+                <div className="relative">
+                  <Avatar className="w-8 h-8 border-2 border-primary/50">
+                    <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
+                      {msg.username.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
+                </div>
+              )}
+            </div>
+          );
+        })}
 
-  // Update rooms when participants change
-  useEffect(() => {
-    setRooms(prevRooms =>
-      prevRooms.map(room => ({
-        ...room,
-        participants: roomParticipants[room.id] || [],
-        activeParticipantCount: (roomParticipants[room.id] || []).length,
-      }))
-    );
-  }, [roomParticipants]);
+        {isTyping && (
+          <div className="flex gap-3">
+            <Avatar className="w-8 h-8 border-2 border-border/50">
+              <AvatarFallback className="bg-secondary text-secondary-foreground">
+                ?
+              </AvatarFallback>
+            </Avatar>
+            <div className="bg-chat-bubble-other p-3 rounded-2xl backdrop-blur-xl">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-chat-typing rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-chat-typing rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-chat-typing rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+          </div>
+        )}
 
-  // Create a new room and automatically join it
-  const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
-    try {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        <div ref={messagesEndRef} />
+      </div>
 
-      console.log('Creating room with:', { name, code, isPublic, userId: user.id });
-
-      const { data, error } = await supabase
-        .from('chat_rooms')
-        .insert({
-          name,
-          code,
-          is_public: isPublic,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Supabase error details:', error);
-        throw error;
-      }
-
-      console.log('Room created successfully:', data);
-
-      const newRoom: ChatRoom = {
-        id: data.id,
-        name: data.name,
-        code: data.code,
-        type: (data.is_public ? 'public' : 'private') as 'public' | 'private',
-        createdBy: data.created_by,
-        participants: [],
-        activeParticipantCount: 0,
-        messages: [],
-        createdAt: new Date(data.created_at),
-      };
-
-      // Set the room first
-      setCurrentRoom(newRoom);
-      setIsConnected(true);
-
-      // Start tracking presence for the creator immediately
-      console.log('Starting presence tracking for creator...');
-      trackRoomParticipants(newRoom.id, user);
-
-      // Add to rooms list if public
-      if (data.is_public) {
-        setRooms(prev => [newRoom, ...prev]);
-      }
-
-      toast({
-        title: "Success",
-        description: `Room created with code: ${code}`,
-      });
-
-      return newRoom;
-    } catch (error) {
-      console.error('Full error details:', error);
-      toast({
-        title: "Error",
-        description: `Failed to create room: ${(error as Error).message || 'Unknown error'}`,
-        variant: "destructive",
-      });
-      return null;
-    }
-  }, [toast, trackRoomParticipants]);
-
-  // Join a room by code with proper presence tracking
-  const joinRoom = useCallback(async (code: string, user: User) => {
-    try {
-      console.log(`User ${user.username} attempting to join room with code: ${code}`);
-
-      const { data, error } = await supabase
-        .from('chat_rooms')
-        .select('*')
-        .eq('code', code.toUpperCase())
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          toast({
-            title: "Error",
-            description: "Room not found. Please check the code.",
-            variant: "destructive",
-          });
-          return null;
-        }
-        throw error;
-      }
-
-      // Fetch messages for this room
-      const { data: messages, error: messagesError } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('room_id', data.id)
-        .order('created_at', { ascending: true });
-
-      if (messagesError) throw messagesError;
-
-      const room: ChatRoom = {
-        id: data.id,
-        name: data.name,
-        code: data.code,
-        type: (data.is_public ? 'public' : 'private') as 'public' | 'private',
-        createdBy: data.created_by,
-        participants: roomParticipants[data.id] || [],
-        activeParticipantCount: (roomParticipants[data.id] || []).length,
-        messages: (messages || []).map((msg): Message => ({
-          id: msg.id,
-          content: msg.content,
-          username: msg.username,
-          userId: msg.user_id,
-          timestamp: new Date(msg.created_at),
-          type: 'text',
-        })),
-        createdAt: new Date(data.created_at),
-      };
-
-      setCurrentRoom(room);
-      setIsConnected(true);
-
-      // Start tracking presence for this room with the current user
-      trackRoomParticipants(room.id, user);
-
-      console.log(`Successfully joined room ${room.name}`);
-      return room;
-    } catch (error) {
-      console.error('Error joining room:', error);
-      toast({
-        title: "Error",
-        description: "Failed to join room",
-        variant: "destructive",
-      });
-      return null;
-    }
-  }, [toast, roomParticipants, trackRoomParticipants]);
-
-  // Send a message
-  const sendMessage = useCallback(async (content: string, user: User, roomId: string) => {
-    try {
-      console.log(`Sending message from ${user.username} to room ${roomId}:`, content);
-
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          room_id: roomId,
-          user_id: user.id,
-          username: user.username,
-          content,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error sending message:', error);
-        throw error;
-      }
-
-      console.log('Message sent successfully:', data);
-      return true;
-    } catch (error) {
-      console.error('Error sending message:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive",
-      });
-      return false;
-    }
-  }, [toast]);
-
-  // Enhanced leave room function to properly cleanup presence
-  const leaveRoom = useCallback(() => {
-    if (currentRoom && presenceChannels[currentRoom.id]) {
-      console.log(`Leaving room ${currentRoom.id}`);
-      // Untrack presence and remove channel
-      presenceChannels[currentRoom.id].untrack();
-      supabase.removeChannel(presenceChannels[currentRoom.id]);
-      
-      // Remove from presence channels
-      setPresenceChannels(prev => {
-        const newChannels = { ...prev };
-        delete newChannels[currentRoom.id];
-        return newChannels;
-      });
-
-      // Clear participants for this room
-      setRoomParticipants(prev => {
-        const newParticipants = { ...prev };
-        delete newParticipants[currentRoom.id];
-        return newParticipants;
-      });
-    }
-
-    setCurrentRoom(null);
-    setIsConnected(false);
-  }, [currentRoom, presenceChannels]);
-
-  // Set up realtime subscription for current room
-  useEffect(() => {
-    if (!currentRoom) return;
-
-    console.log(`Setting up message subscription for room ${currentRoom.id}`);
-
-    const channel = supabase
-      .channel(`room-messages:${currentRoom.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `room_id=eq.${currentRoom.id}`,
-        },
-        (payload) => {
-          console.log('New message received:', payload.new);
-          const newMessage: Message = {
-            id: payload.new.id,
-            content: payload.new.content,
-            username: payload.new.username,
-            userId: payload.new.user_id,
-            timestamp: new Date(payload.new.created_at),
-            type: 'text',
-          };
-
-          setCurrentRoom(prev => prev ? {
-            ...prev,
-            messages: [...prev.messages, newMessage],
-          } : null);
-        }
-      )
-      .subscribe((status) => {
-        console.log(`Message subscription status for room ${currentRoom.id}:`, status);
-      });
-
-    return () => {
-      console.log(`Cleaning up message subscription for room ${currentRoom.id}`);
-      supabase.removeChannel(channel);
-    };
-  }, [currentRoom]);
-
-  // Initialize public rooms on mount
-  useEffect(() => {
-    fetchPublicRooms();
-  }, [fetchPublicRooms]);
-
-  // Cleanup all presence channels on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(presenceChannels).forEach(channel => {
-        channel.untrack();
-        supabase.removeChannel(channel);
-      });
-    };
-  }, [presenceChannels]);
-
-  return {
-    rooms,
-    currentRoom,
-    isConnected,
-    createRoom,
-    joinRoom,
-    sendMessage,
-    setCurrentRoom: leaveRoom,
-    setIsConnected,
-    fetchPublicRooms,
-    roomParticipants,
-  };
+      {/* Message Input */}
+      <div className="p-4 bg-card border-t border-border/50 backdrop-blur-xl">
+        <div className="flex gap-3">
+          <Input
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            placeholder="Type a message..."
+            className="flex-1 bg-background/50 border-border/50 focus:bg-background transition-all duration-300"
+            maxLength={500}
+          />
+          <Button
+            onClick={handleSendMessage}
+            disabled={!message.trim()}
+            className="bg-gradient-primary hover:opacity-90 transition-all duration-300"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 };
