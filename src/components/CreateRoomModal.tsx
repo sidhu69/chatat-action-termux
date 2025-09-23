@@ -20,47 +20,26 @@ export const CreateRoomModal = ({ open, onOpenChange }: CreateRoomModalProps) =>
   const [roomName, setRoomName] = useState('');
   const [description, setDescription] = useState('');
   const [roomType, setRoomType] = useState<'private' | 'public'>('public');
-  const { state, dispatch } = useChat();
+  const { state, supabaseChat } = useChat();
 
-  const generateRoomCode = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  };
-
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!roomName.trim() || !state.currentUser) return;
 
-    const roomCode = generateRoomCode();
-    const newRoom: ChatRoom = {
-      id: Date.now().toString(),
-      code: roomCode,
-      name: roomName.trim(),
-      description: description.trim() || undefined,
-      type: roomType,
-      createdBy: state.currentUser.id,
-      participants: [state.currentUser],
-      messages: [{
-        id: '1',
-        content: `Welcome to ${roomName}! 🎉`,
-        userId: 'system',
-        username: 'System',
-        timestamp: new Date(),
-        type: 'system'
-      }],
-      createdAt: new Date(),
-    };
+    const newRoom = await supabaseChat.createRoom(
+      roomName.trim(),
+      roomType === 'public',
+      state.currentUser
+    );
 
-    dispatch({ type: 'ADD_ROOM', payload: newRoom });
-    dispatch({ type: 'JOIN_ROOM', payload: newRoom });
-    
-    toast({
-      title: "Room created successfully!",
-      description: `Room code: ${roomCode}`,
-    });
-
-    onOpenChange(false);
-    setRoomName('');
-    setDescription('');
-    setRoomType('public');
+    if (newRoom) {
+      const joinedRoom = await supabaseChat.joinRoom(newRoom.code);
+      if (joinedRoom) {
+        onOpenChange(false);
+        setRoomName('');
+        setDescription('');
+        setRoomType('public');
+      }
+    }
   };
 
   const copyCode = (code: string) => {

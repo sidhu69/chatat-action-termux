@@ -19,7 +19,7 @@ export const ChatInterface = () => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { state, dispatch } = useChat();
+  const { state, dispatch, supabaseChat } = useChat();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -27,34 +27,25 @@ export const ChatInterface = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [state.currentRoom?.messages]);
+  }, [supabaseChat.currentRoom?.messages]);
 
-  const handleSendMessage = () => {
-    if (!message.trim() || !state.currentRoom || !state.currentUser) return;
+  const handleSendMessage = async () => {
+    if (!message.trim() || !supabaseChat.currentRoom || !state.currentUser) return;
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      content: message.trim(),
-      userId: state.currentUser.id,
-      username: state.currentUser.username,
-      timestamp: new Date(),
-      type: 'text',
-    };
-
-    dispatch({
-      type: 'ADD_MESSAGE',
-      payload: { roomId: state.currentRoom.id, message: newMessage }
-    });
-
-    setMessage('');
-
-    // Simulate typing indicator for demo
-    setIsTyping(true);
-    setTimeout(() => setIsTyping(false), 2000);
+    const success = await supabaseChat.sendMessage(
+      message.trim(), 
+      state.currentUser, 
+      supabaseChat.currentRoom.id
+    );
+    
+    if (success) {
+      setMessage('');
+    }
   };
 
   const handleLeaveRoom = () => {
-    dispatch({ type: 'LEAVE_ROOM' });
+    supabaseChat.setCurrentRoom(null);
+    supabaseChat.setIsConnected(false);
     toast({
       title: "Left room",
       description: "You have left the chat room",
@@ -62,8 +53,8 @@ export const ChatInterface = () => {
   };
 
   const copyRoomCode = () => {
-    if (state.currentRoom) {
-      navigator.clipboard.writeText(state.currentRoom.code);
+    if (supabaseChat.currentRoom) {
+      navigator.clipboard.writeText(supabaseChat.currentRoom.code);
       toast({
         title: "Room code copied!",
         description: "Share this code with others to invite them",
@@ -78,7 +69,7 @@ export const ChatInterface = () => {
     }).format(date);
   };
 
-  if (!state.currentRoom) return null;
+  if (!supabaseChat.currentRoom) return null;
 
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -94,10 +85,10 @@ export const ChatInterface = () => {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>
-            <h2 className="font-bold text-lg">{state.currentRoom.name}</h2>
+            <h2 className="font-bold text-lg">{supabaseChat.currentRoom.name}</h2>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Users className="w-4 h-4" />
-              {state.currentRoom.participants.length} participants
+              {supabaseChat.currentRoom.participants.length} participants
               <Button
                 variant="ghost"
                 size="sm"
@@ -105,7 +96,7 @@ export const ChatInterface = () => {
                 className="h-6 px-2 text-xs bg-primary/20 text-primary hover:bg-primary/30"
               >
                 <Hash className="w-3 h-3 mr-1" />
-                {state.currentRoom.code}
+                {supabaseChat.currentRoom.code}
                 <Copy className="w-3 h-3 ml-1" />
               </Button>
             </div>
@@ -119,7 +110,7 @@ export const ChatInterface = () => {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-secondary/30">
-        {state.currentRoom.messages.map((msg) => {
+        {supabaseChat.currentRoom.messages.map((msg) => {
           const isOwn = msg.userId === state.currentUser?.id;
           const isSystem = msg.type === 'system';
 

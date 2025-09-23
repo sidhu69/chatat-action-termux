@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { ChatState, ChatRoom, Message, User } from '@/types/chat';
+import { useSupabaseChat } from '@/hooks/useSupabaseChat';
 
 type ChatAction =
   | { type: 'SET_USER'; payload: User }
@@ -47,13 +48,15 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
 const ChatContext = createContext<{
   state: ChatState;
   dispatch: React.Dispatch<ChatAction>;
+  supabaseChat: ReturnType<typeof useSupabaseChat>;
 } | null>(null);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(chatReducer, initialState);
+  const supabaseChat = useSupabaseChat();
 
   return (
-    <ChatContext.Provider value={{ state, dispatch }}>
+    <ChatContext.Provider value={{ state, dispatch, supabaseChat }}>
       {children}
     </ChatContext.Provider>
   );

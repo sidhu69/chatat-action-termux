@@ -6,15 +6,7 @@ import { ChatInterface } from '@/components/ChatInterface';
 import { createDemoRooms } from '@/utils/demoData';
 
 const Index = () => {
-  const { state, dispatch } = useChat();
-
-  // Initialize demo rooms on first load
-  useEffect(() => {
-    if (state.rooms.length === 0) {
-      const demoRooms = createDemoRooms();
-      dispatch({ type: 'SET_ROOMS', payload: demoRooms });
-    }
-  }, [state.rooms.length, dispatch]);
+  const { state, supabaseChat } = useChat();
 
   // Show username setup if no user is set
   if (!state.currentUser) {
@@ -22,7 +14,7 @@ const Index = () => {
   }
 
   // Show chat interface if in a room
-  if (state.currentRoom && state.isConnected) {
+  if (supabaseChat.currentRoom && supabaseChat.isConnected) {
     return <ChatInterface />;
   }
 

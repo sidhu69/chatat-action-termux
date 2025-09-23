@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ secrets.TERMUX_HOST != '' }}
     steps:
     - uses: actions/checkout@v3
     
@@ -29,7 +30,7 @@ jobs:
         host: ${{ secrets.TERMUX_HOST }}
         username: ${{ secrets.TERMUX_USER }}
         key: ${{ secrets.TERMUX_SSH_KEY }}
-        port: ${{ secrets.TERMUX_PORT }}
+        port: ${{ secrets.TERMUX_PORT || '8022' }}
         script: |
           cd ~/chatat-app
           git pull origin main

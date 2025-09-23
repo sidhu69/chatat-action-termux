@@ -1,0 +1,76 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables. Please check your Supabase integration.');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+});
+
+// Database types
+export interface Database {
+  public: {
+    Tables: {
+      chat_rooms: {
+        Row: {
+          id: string;
+          name: string;
+          code: string;
+          is_public: boolean;
+          created_at: string;
+          created_by: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          code: string;
+          is_public?: boolean;
+          created_at?: string;
+          created_by: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          code?: string;
+          is_public?: boolean;
+          created_at?: string;
+          created_by?: string;
+        };
+      };
+      messages: {
+        Row: {
+          id: string;
+          room_id: string;
+          user_id: string;
+          username: string;
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          room_id: string;
+          user_id: string;
+          username: string;
+          content: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          room_id?: string;
+          user_id?: string;
+          username?: string;
+          content?: string;
+          created_at?: string;
+        };
+      };
+    };
+  };
+}

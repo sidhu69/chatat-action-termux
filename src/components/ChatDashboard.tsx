@@ -9,19 +9,18 @@ import { JoinRoomModal } from './JoinRoomModal';
 import chatHero from '@/assets/chat-hero.jpg';
 
 export const ChatDashboard = () => {
-  const { state, dispatch } = useChat();
+  const { state, dispatch, supabaseChat } = useChat();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
 
-  const publicRooms = state.rooms.filter(room => room.type === 'public');
+  const publicRooms = supabaseChat.rooms.filter(room => room.type === 'public');
 
-  const handleJoinRoom = (room: any) => {
+  const handleJoinRoom = async (room: any) => {
     if (state.currentUser) {
-      const updatedRoom = {
-        ...room,
-        participants: [...room.participants, state.currentUser]
-      };
-      dispatch({ type: 'JOIN_ROOM', payload: updatedRoom });
+      const joinedRoom = await supabaseChat.joinRoom(room.code);
+      if (joinedRoom) {
+        dispatch({ type: 'JOIN_ROOM', payload: joinedRoom });
+      }
     }
   };
 

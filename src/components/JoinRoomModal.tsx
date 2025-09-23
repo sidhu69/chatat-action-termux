@@ -15,42 +15,25 @@ interface JoinRoomModalProps {
 export const JoinRoomModal = ({ open, onOpenChange }: JoinRoomModalProps) => {
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
-  const { state, dispatch } = useChat();
+  const { state, supabaseChat } = useChat();
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!roomCode.trim() || !state.currentUser) return;
 
-    const room = state.rooms.find(r => r.code.toLowerCase() === roomCode.trim().toLowerCase());
+    const room = await supabaseChat.joinRoom(roomCode.trim());
     
-    if (!room) {
-      setError('Room not found. Please check the code and try again.');
-      return;
-    }
-
-    if (room.participants.find(p => p.id === state.currentUser?.id)) {
+    if (room) {
       toast({
-        title: "Already in room",
-        description: "You're already a participant in this room",
+        title: "Joined room successfully!",
+        description: `Welcome to ${room.name}`,
       });
+
       onOpenChange(false);
-      return;
+      setRoomCode('');
+      setError('');
+    } else {
+      setError('Room not found. Please check the code and try again.');
     }
-
-    const updatedRoom = {
-      ...room,
-      participants: [...room.participants, state.currentUser]
-    };
-
-    dispatch({ type: 'JOIN_ROOM', payload: updatedRoom });
-    
-    toast({
-      title: "Joined room successfully!",
-      description: `Welcome to ${room.name}`,
-    });
-
-    onOpenChange(false);
-    setRoomCode('');
-    setError('');
   };
 
   const handleCodeChange = (value: string) => {
