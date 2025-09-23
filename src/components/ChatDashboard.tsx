@@ -8,21 +8,54 @@ import { CreateRoomModal } from './CreateRoomModal';
 import { JoinRoomModal } from './JoinRoomModal';
 import { ChatRoom } from '@/types/chat';
 import chatHero from '@/assets/chat-hero.jpg';
+import { toast } from '@/hooks/use-toast';
 
 export const ChatDashboard = () => {
   const { state, dispatch, supabaseChat } = useChat();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
 
   const publicRooms = supabaseChat.rooms.filter(room => room.type === 'public');
 
   const handleJoinRoom = async (room: ChatRoom) => {
-    if (state.currentUser) {
+    if (!state.currentUser) {
+      toast({
+        title: "Error",
+        description: "Please set your username first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setJoiningRoomId(room.id);
+    
+    try {
       console.log(`Joining room ${room.name} with code ${room.code}`);
       const joinedRoom = await supabaseChat.joinRoom(room.code, state.currentUser);
+      
       if (joinedRoom) {
         console.log('Successfully joined room from dashboard');
+        toast({
+          title: "Joined room successfully!",
+          description: `Welcome to ${joinedRoom.name}`,
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to join room. Please try again.",
+          variant: "destructive",
+        });
       }
+    } catch (error) {
+      console.error('Error joining room from dashboard:', error);
+      toast({
+        title: "Error",
+        description: "Failed to join room. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setJoiningRoomId(null);
     }
   };
 
@@ -136,9 +169,17 @@ export const ChatDashboard = () => {
                       </div>
                       <Button
                         onClick={() => handleJoinRoom(room)}
+                        disabled={joiningRoomId === room.id || !state.currentUser}
                         className="bg-gradient-primary hover:opacity-90 transition-all duration-300"
                       >
-                        Join Room
+                        {joiningRoomId === room.id ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            Joining...
+                          </div>
+                        ) : (
+                          'Join Room'
+                        )}
                       </Button>
                     </div>
                   </CardContent>
