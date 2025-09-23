@@ -21,12 +21,7 @@ export const useSupabaseChat = () => {
 
   // Track participants for a room with better real-time updates
   const trackRoomParticipants = useCallback((roomId: string, user?: User) => {
-    // Don't create multiple channels for the same room
-    if (presenceChannels[roomId]) {
-      return presenceChannels[roomId];
-    }
-
-    console.log(`Creating presence channel for room ${roomId}`, user ? `with user ${user.username}` : 'without user');
+    console.log(`Setting up presence tracking for room ${roomId}`, user ? `with user ${user.username}` : 'without user');
 
     const channel = supabase
       .channel(`room-presence:${roomId}`)
@@ -53,37 +48,20 @@ export const useSupabaseChat = () => {
         console.log('User left room:', leftPresences);
       })
       .subscribe(async (status) => {
-        console.log(`Presence channel status for room ${roomId}:`, status);
+        console.log(`Presence subscription status for room ${roomId}:`, status);
         if (status === 'SUBSCRIBED' && user) {
-          // Track current user's presence
           const trackResult = await channel.track({
             user_id: user.id,
             username: user.username,
             joined_at: new Date().toISOString(),
           });
-          console.log(`User ${user.username} tracking presence in room ${roomId}:`, trackResult);
+          console.log(`User ${user.username} tracking result:`, trackResult);
         }
       });
 
     setPresenceChannels(prev => ({ ...prev, [roomId]: channel }));
     return channel;
-  }, [presenceChannels]);
-
-  // Enhanced function to update current room participants in real-time
-  const updateCurrentRoomParticipants = useCallback(() => {
-    if (currentRoom && roomParticipants[currentRoom.id]) {
-      setCurrentRoom(prev => prev ? {
-        ...prev,
-        participants: roomParticipants[currentRoom.id],
-        activeParticipantCount: roomParticipants[currentRoom.id].length,
-      } : null);
-    }
-  }, [currentRoom, roomParticipants]);
-
-  // Update current room participants when they change
-  useEffect(() => {
-    updateCurrentRoomParticipants();
-  }, [updateCurrentRoomParticipants]);
+  }, []);
 
   // Fetch all public rooms with participant counts
   const fetchPublicRooms = useCallback(async () => {
@@ -106,11 +84,6 @@ export const useSupabaseChat = () => {
 
           if (messagesError) {
             console.error('Error fetching messages:', messagesError);
-          }
-
-          // Track participants for this room (without user tracking for public rooms listing)
-          if (!presenceChannels[room.id]) {
-            trackRoomParticipants(room.id);
           }
 
           const participants = roomParticipants[room.id] || [];
@@ -145,18 +118,7 @@ export const useSupabaseChat = () => {
         variant: "destructive",
       });
     }
-  }, [toast, trackRoomParticipants, roomParticipants, presenceChannels]);
-
-  // Update room participant counts when participants change
-  useEffect(() => {
-    setRooms(prevRooms =>
-      prevRooms.map(room => ({
-        ...room,
-        participants: roomParticipants[room.id] || [],
-        activeParticipantCount: (roomParticipants[room.id] || []).length,
-      }))
-    );
-  }, [roomParticipants]);
+  }, [toast, roomParticipants]);
 
   // Create a new room and automatically join it
   const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
@@ -225,8 +187,10 @@ export const useSupabaseChat = () => {
   }, [toast, trackRoomParticipants]);
 
   // Join a room by code with proper presence tracking
-  const joinRoom = useCallback(async (code: string, user?: User) => {
+  const joinRoom = useCallback(async (code: string, user: User) => {
     try {
+      console.log(`User ${user.username} attempting to join room with code: ${code}`);
+
       const { data, error } = await supabase
         .from('chat_rooms')
         .select('*')
@@ -277,10 +241,9 @@ export const useSupabaseChat = () => {
       setIsConnected(true);
 
       // Start tracking presence for this room with the current user
-      if (user) {
-        trackRoomParticipants(room.id, user);
-      }
+      trackRoomParticipants(room.id, user);
 
+      console.log(`Successfully joined room ${room.name}`);
       return room;
     } catch (error) {
       console.error('Error joining room:', error);
@@ -296,6 +259,8 @@ export const useSupabaseChat = () => {
   // Send a message
   const sendMessage = useCallback(async (content: string, user: User, roomId: string) => {
     try {
+      console.log(`Sending message from ${user.username} to room ${roomId}:`, content);
+
       const { data, error } = await supabase
         .from('messages')
         .insert({
@@ -307,8 +272,12 @@ export const useSupabaseChat = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error sending message:', error);
+        throw error;
+      }
 
+      console.log('Message sent successfully:', data);
       return true;
     } catch (error) {
       console.error('Error sending message:', error);
@@ -335,13 +304,6 @@ export const useSupabaseChat = () => {
         delete newChannels[currentRoom.id];
         return newChannels;
       });
-
-      // Clear room participants for this room
-      setRoomParticipants(prev => {
-        const newParticipants = { ...prev };
-        delete newParticipants[currentRoom.id];
-        return newParticipants;
-      });
     }
 
     setCurrentRoom(null);
@@ -352,8 +314,10 @@ export const useSupabaseChat = () => {
   useEffect(() => {
     if (!currentRoom) return;
 
+    console.log(`Setting up message subscription for room ${currentRoom.id}`);
+
     const channel = supabase
-      .channel(`room:${currentRoom.id}`)
+      .channel(`room-messages:${currentRoom.id}`)
       .on(
         'postgres_changes',
         {
@@ -363,6 +327,7 @@ export const useSupabaseChat = () => {
           filter: `room_id=eq.${currentRoom.id}`,
         },
         (payload) => {
+          console.log('New message received:', payload.new);
           const newMessage: Message = {
             id: payload.new.id,
             content: payload.new.content,
@@ -378,9 +343,12 @@ export const useSupabaseChat = () => {
           } : null);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log(`Message subscription status for room ${currentRoom.id}:`, status);
+      });
 
     return () => {
+      console.log(`Cleaning up message subscription for room ${currentRoom.id}`);
       supabase.removeChannel(channel);
     };
   }, [currentRoom]);
@@ -405,9 +373,9 @@ export const useSupabaseChat = () => {
     currentRoom,
     isConnected,
     createRoom,
-    joinRoom: (code: string) => joinRoom(code),
+    joinRoom,
     sendMessage,
-    setCurrentRoom: leaveRoom, // Use enhanced leave room function
+    setCurrentRoom: leaveRoom,
     setIsConnected,
     fetchPublicRooms,
     roomParticipants,
