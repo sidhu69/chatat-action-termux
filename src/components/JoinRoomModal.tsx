@@ -15,24 +15,39 @@ interface JoinRoomModalProps {
 export const JoinRoomModal = ({ open, onOpenChange }: JoinRoomModalProps) => {
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
   const { state, supabaseChat } = useChat();
 
   const handleJoin = async () => {
-    if (!roomCode.trim() || !state.currentUser) return;
+    if (!roomCode.trim() || !state.currentUser || isJoining) return;
 
-    const room = await supabaseChat.joinRoom(roomCode.trim());
-    
-    if (room) {
-      toast({
-        title: "Joined room successfully!",
-        description: `Welcome to ${room.name}`,
-      });
+    setIsJoining(true);
+    setError('');
 
-      onOpenChange(false);
-      setRoomCode('');
-      setError('');
-    } else {
-      setError('Room not found. Please check the code and try again.');
+    try {
+      console.log(`Attempting to join room with code: ${roomCode.trim()}`);
+      console.log('Current user:', state.currentUser);
+
+      // Pass both the room code AND the current user
+      const room = await supabaseChat.joinRoom(roomCode.trim(), state.currentUser);
+
+      if (room) {
+        toast({
+          title: "Joined room successfully!",
+          description: `Welcome to ${room.name}`,
+        });
+
+        onOpenChange(false);
+        setRoomCode('');
+        setError('');
+      } else {
+        setError('Room not found. Please check the code and try again.');
+      }
+    } catch (error) {
+      console.error('Error in handleJoin:', error);
+      setError('Failed to join room. Please try again.');
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -63,6 +78,7 @@ export const JoinRoomModal = ({ open, onOpenChange }: JoinRoomModalProps) => {
                 onChange={(e) => handleCodeChange(e.target.value)}
                 className="pl-10 bg-background/50 border-border/50 text-center text-lg font-mono tracking-wider"
                 maxLength={6}
+                disabled={isJoining}
               />
             </div>
             {error && (
@@ -74,21 +90,29 @@ export const JoinRoomModal = ({ open, onOpenChange }: JoinRoomModalProps) => {
           </div>
 
           <div className="flex gap-3">
-            <Button 
+            <Button
               onClick={handleJoin}
-              disabled={roomCode.length !== 6}
+              disabled={roomCode.length !== 6 || !state.currentUser || isJoining}
               className="flex-1 bg-gradient-primary hover:opacity-90 transition-all duration-300"
             >
-              Join Room
+              {isJoining ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Joining...
+                </div>
+              ) : (
+                'Join Room'
+              )}
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
                 onOpenChange(false);
                 setRoomCode('');
                 setError('');
               }}
               className="border-border/50 bg-background/50"
+              disabled={isJoining}
             >
               Cancel
             </Button>
