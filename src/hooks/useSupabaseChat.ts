@@ -1,15 +1,39 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ChatRoom, Message, User } from '@/types/chat';
+import { ChatRoom, Message, User, Participant } from '@/types/chat';
 import { useToast } from '@/hooks/use-toast';
 
 export const useSupabaseChat = () => {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [currentRoom, setCurrentRoom] = useState<ChatRoom | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [roomParticipants, setRoomParticipants] = useState<{[key: string]: Participant[]}>({});
   const { toast } = useToast();
 
-  // Fetch all public rooms
+  // Track participants for a room
+  const trackRoomParticipants = useCallback((roomId: string) => {
+    const channel = supabase
+      .channel(`room-presence:${roomId}`)
+      .on('presence', { event: 'sync' }, () => {
+        const newState = channel.presenceState();
+        const participantList = Object.values(newState).flat().map((presence: any) => ({
+          id: presence.user_id,
+          username: presence.username,
+          joinedAt: new Date(presence.joined_at),
+          isActive: true,
+        }));
+        
+        setRoomParticipants(prev => ({
+          ...prev,
+          [roomId]: participantList
+        }));
+      })
+      .subscribe();
+
+    return channel;
+  }, []);
+
+  // Fetch all public rooms with participant counts
   const fetchPublicRooms = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -30,25 +54,21 @@ export const useSupabaseChat = () => {
 
           if (messagesError) {
             console.error('Error fetching messages:', messagesError);
-            return {
-              id: room.id,
-              name: room.name,
-              code: room.code,
-              type: (room.is_public ? 'public' : 'private') as 'public' | 'private',
-              createdBy: room.created_by,
-              participants: [], // Will be populated as needed
-              messages: [],
-              createdAt: new Date(room.created_at),
-            };
           }
 
+          // Track participants for this room
+          trackRoomParticipants(room.id);
+
+          const participants = roomParticipants[room.id] || [];
+          
           return {
             id: room.id,
             name: room.name,
             code: room.code,
             type: (room.is_public ? 'public' : 'private') as 'public' | 'private',
             createdBy: room.created_by,
-            participants: [], // Will be populated as needed
+            participants,
+            activeParticipantCount: participants.length,
             messages: (messages || []).map((msg): Message => ({
               id: msg.id,
               content: msg.content,
@@ -62,7 +82,14 @@ export const useSupabaseChat = () => {
         })
       );
 
-      setRooms(roomsWithMessages);
+      // Filter out rooms with 0 active participants
+      const activeRooms = roomsWithMessages.filter(room => {
+        // Always show rooms if we don't have participant data yet, or if they have participants
+        const participants = roomParticipants[room.id];
+        return !participants || participants.length > 0;
+      });
+
+      setRooms(activeRooms);
     } catch (error) {
       console.error('Error fetching rooms:', error);
       toast({
@@ -71,7 +98,21 @@ export const useSupabaseChat = () => {
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast, trackRoomParticipants, roomParticipants]);
+
+  // Update room participant counts when participants change
+  useEffect(() => {
+    setRooms(prevRooms => 
+      prevRooms.map(room => ({
+        ...room,
+        participants: roomParticipants[room.id] || [],
+        activeParticipantCount: (roomParticipants[room.id] || []).length,
+      })).filter(room => 
+        // Hide public rooms with 0 participants
+        room.type === 'private' || room.activeParticipantCount > 0
+      )
+    );
+  }, [roomParticipants]);
 
   // Create a new room
   const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
@@ -105,6 +146,7 @@ export const useSupabaseChat = () => {
         type: (data.is_public ? 'public' : 'private') as 'public' | 'private',
         createdBy: data.created_by,
         participants: [],
+        activeParticipantCount: 0,
         messages: [],
         createdAt: new Date(data.created_at),
       };
@@ -131,7 +173,7 @@ export const useSupabaseChat = () => {
   }, [toast]);
 
   // Join a room by code
-  const joinRoom = useCallback(async (code: string) => {
+  const joinRoom = useCallback(async (code: string, user?: User) => {
     try {
       const { data, error } = await supabase
         .from('chat_rooms')
@@ -166,7 +208,8 @@ export const useSupabaseChat = () => {
         code: data.code,
         type: (data.is_public ? 'public' : 'private') as 'public' | 'private',
         createdBy: data.created_by,
-        participants: [],
+        participants: roomParticipants[data.id] || [],
+        activeParticipantCount: (roomParticipants[data.id] || []).length,
         messages: (messages || []).map((msg): Message => ({
           id: msg.id,
           content: msg.content,
@@ -180,6 +223,12 @@ export const useSupabaseChat = () => {
 
       setCurrentRoom(room);
       setIsConnected(true);
+
+      // Start tracking presence for this room
+      if (user) {
+        trackRoomParticipants(room.id);
+      }
+
       return room;
     } catch (error) {
       console.error('Error joining room:', error);
@@ -190,7 +239,7 @@ export const useSupabaseChat = () => {
       });
       return null;
     }
-  }, [toast]);
+  }, [toast, roomParticipants, trackRoomParticipants]);
 
   // Send a message
   const sendMessage = useCallback(async (content: string, user: User, roomId: string) => {
@@ -208,7 +257,6 @@ export const useSupabaseChat = () => {
 
       if (error) throw error;
 
-      // Message will be received via realtime subscription
       return true;
     } catch (error) {
       console.error('Error sending message:', error);
@@ -268,10 +316,11 @@ export const useSupabaseChat = () => {
     currentRoom,
     isConnected,
     createRoom,
-    joinRoom,
+    joinRoom: (code: string) => joinRoom(code),
     sendMessage,
     setCurrentRoom,
     setIsConnected,
     fetchPublicRooms,
+    roomParticipants,
   };
 };
