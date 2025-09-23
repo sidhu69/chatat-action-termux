@@ -4,13 +4,14 @@ const config: CapacitorConfig = {
   appId: 'com.chatat.app',
   appName: 'Chatat',
   webDir: 'dist',
+  bundledWebRuntime: false,
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: "#ffffffff",
+      backgroundColor: "#ffffff",
       androidSplashResourceName: "splash",
       androidScaleType: "CENTER_CROP",
-      showSpinner: false,
+      showSpinner: true,
       androidSpinnerStyle: "large",
       iosSpinnerStyle: "small",
       spinnerColor: "#999999",
