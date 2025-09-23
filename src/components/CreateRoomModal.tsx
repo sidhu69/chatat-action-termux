@@ -25,6 +25,8 @@ export const CreateRoomModal = ({ open, onOpenChange }: CreateRoomModalProps) =>
   const handleCreate = async () => {
     if (!roomName.trim() || !state.currentUser) return;
 
+    console.log('Creating room with user:', state.currentUser);
+
     const newRoom = await supabaseChat.createRoom(
       roomName.trim(),
       roomType === 'public',
@@ -32,13 +34,12 @@ export const CreateRoomModal = ({ open, onOpenChange }: CreateRoomModalProps) =>
     );
 
     if (newRoom) {
-      const joinedRoom = await supabaseChat.joinRoom(newRoom.code);
-      if (joinedRoom) {
-        onOpenChange(false);
-        setRoomName('');
-        setDescription('');
-        setRoomType('public');
-      }
+      // Room creation now automatically joins the room, so we don't need to join again
+      console.log('Room created successfully:', newRoom);
+      onOpenChange(false);
+      setRoomName('');
+      setDescription('');
+      setRoomType('public');
     }
   };
 
@@ -108,15 +109,15 @@ export const CreateRoomModal = ({ open, onOpenChange }: CreateRoomModalProps) =>
           </div>
 
           <div className="flex gap-3">
-            <Button 
+            <Button
               onClick={handleCreate}
               disabled={!roomName.trim()}
               className="flex-1 bg-gradient-primary hover:opacity-90 transition-all duration-300"
             >
               Create Room
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => onOpenChange(false)}
               className="border-border/50 bg-background/50"
             >
