@@ -21,6 +21,12 @@ export const useSupabaseChat = () => {
 
   // Track participants for a room with better real-time updates
   const trackRoomParticipants = useCallback((roomId: string, user?: User) => {
+    // Don't create multiple channels for the same room
+    if (presenceChannels[roomId]) {
+      console.log(`Presence channel already exists for room ${roomId}`);
+      return presenceChannels[roomId];
+    }
+
     console.log(`Setting up presence tracking for room ${roomId}`, user ? `with user ${user.username}` : 'without user');
 
     const channel = supabase
@@ -61,7 +67,19 @@ export const useSupabaseChat = () => {
 
     setPresenceChannels(prev => ({ ...prev, [roomId]: channel }));
     return channel;
-  }, []);
+  }, [presenceChannels]);
+
+  // Update current room participants when roomParticipants changes
+  useEffect(() => {
+    if (currentRoom && roomParticipants[currentRoom.id]) {
+      const updatedParticipants = roomParticipants[currentRoom.id];
+      setCurrentRoom(prev => prev ? {
+        ...prev,
+        participants: updatedParticipants,
+        activeParticipantCount: updatedParticipants.length,
+      } : null);
+    }
+  }, [roomParticipants, currentRoom?.id]);
 
   // Fetch all public rooms with participant counts
   const fetchPublicRooms = useCallback(async () => {
@@ -120,6 +138,17 @@ export const useSupabaseChat = () => {
     }
   }, [toast, roomParticipants]);
 
+  // Update rooms when participants change
+  useEffect(() => {
+    setRooms(prevRooms =>
+      prevRooms.map(room => ({
+        ...room,
+        participants: roomParticipants[room.id] || [],
+        activeParticipantCount: (roomParticipants[room.id] || []).length,
+      }))
+    );
+  }, [roomParticipants]);
+
   // Create a new room and automatically join it
   const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
     try {
@@ -157,11 +186,12 @@ export const useSupabaseChat = () => {
         createdAt: new Date(data.created_at),
       };
 
-      // Automatically join the created room
+      // Set the room first
       setCurrentRoom(newRoom);
       setIsConnected(true);
 
-      // Start tracking presence for the creator
+      // Start tracking presence for the creator immediately
+      console.log('Starting presence tracking for creator...');
       trackRoomParticipants(newRoom.id, user);
 
       // Add to rooms list if public
@@ -303,6 +333,13 @@ export const useSupabaseChat = () => {
         const newChannels = { ...prev };
         delete newChannels[currentRoom.id];
         return newChannels;
+      });
+
+      // Clear participants for this room
+      setRoomParticipants(prev => {
+        const newParticipants = { ...prev };
+        delete newParticipants[currentRoom.id];
+        return newParticipants;
       });
     }
 
