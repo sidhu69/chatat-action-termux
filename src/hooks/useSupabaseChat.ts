@@ -78,6 +78,8 @@ export const useSupabaseChat = () => {
     try {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
+      console.log('Creating room with:', { name, code, isPublic, userId: user.id });
+
       const { data, error } = await supabase
         .from('chat_rooms')
         .insert({
@@ -89,7 +91,12 @@ export const useSupabaseChat = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+
+      console.log('Room created successfully:', data);
 
       const newRoom: ChatRoom = {
         id: data.id,
@@ -113,10 +120,10 @@ export const useSupabaseChat = () => {
 
       return newRoom;
     } catch (error) {
-      console.error('Error creating room:', error);
+      console.error('Full error details:', error);
       toast({
         title: "Error",
-        description: "Failed to create room",
+        description: `Failed to create room: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
       return null;
