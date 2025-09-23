@@ -20,6 +20,88 @@ export const useSupabaseChat = () => {
   const [messageChannels, setMessageChannels] = useState<{[key: string]: RealtimeChannel}>({});
   const { toast } = useToast();
 
+  // Auto-cleanup empty public rooms
+  const cleanupEmptyRooms = useCallback(async () => {
+    try {
+      console.log('Starting empty room cleanup check...');
+      
+      // Get all public rooms
+      const { data: publicRooms, error } = await supabase
+        .from('chat_rooms')
+        .select('id, name, code, created_at')
+        .eq('is_public', true);
+
+      if (error) throw error;
+
+      if (!publicRooms || publicRooms.length === 0) {
+        console.log('No public rooms to check');
+        return;
+      }
+
+      // Check each room for participants
+      const roomsToDelete: string[] = [];
+      
+      for (const room of publicRooms) {
+        const participants = roomParticipants[room.id] || [];
+        const hasParticipants = participants.length > 0;
+        
+        // Only delete rooms that are older than 5 minutes and have no participants
+        const roomAge = Date.now() - new Date(room.created_at).getTime();
+        const isOldEnough = roomAge > 5 * 60 * 1000; // 5 minutes
+        
+        if (!hasParticipants && isOldEnough) {
+          console.log(`Marking room ${room.name} (${room.code}) for deletion - no participants and older than 5 minutes`);
+          roomsToDelete.push(room.id);
+        }
+      }
+
+      if (roomsToDelete.length === 0) {
+        console.log('No empty rooms to delete');
+        return;
+      }
+
+      // Delete messages first (foreign key constraint)
+      for (const roomId of roomsToDelete) {
+        const { error: messagesError } = await supabase
+          .from('messages')
+          .delete()
+          .eq('room_id', roomId);
+        
+        if (messagesError) {
+          console.error(`Error deleting messages for room ${roomId}:`, messagesError);
+        }
+      }
+
+      // Then delete the rooms
+      const { error: deleteError } = await supabase
+        .from('chat_rooms')
+        .delete()
+        .in('id', roomsToDelete);
+
+      if (deleteError) {
+        console.error('Error deleting empty rooms:', deleteError);
+        return;
+      }
+
+      console.log(`Successfully deleted ${roomsToDelete.length} empty rooms`);
+
+      // Update local state to remove deleted rooms
+      setRooms(prevRooms => prevRooms.filter(room => !roomsToDelete.includes(room.id)));
+      
+      // Clean up local participant tracking for deleted rooms
+      setRoomParticipants(prev => {
+        const updated = { ...prev };
+        roomsToDelete.forEach(roomId => {
+          delete updated[roomId];
+        });
+        return updated;
+      });
+
+    } catch (error) {
+      console.error('Error during room cleanup:', error);
+    }
+  }, [roomParticipants]);
+
   // Track participants for a room with better real-time updates
   const trackRoomParticipants = useCallback((roomId: string, user?: User) => {
     // Don't create multiple channels for the same room
@@ -64,6 +146,11 @@ export const useSupabaseChat = () => {
       })
       .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
         console.log('User left room:', key, leftPresences);
+        
+        // Trigger cleanup check when someone leaves
+        setTimeout(() => {
+          cleanupEmptyRooms();
+        }, 10000); // Wait 10 seconds after someone leaves to check for cleanup
       })
       .subscribe(async (status) => {
         console.log(`Presence subscription status for room ${roomId}:`, status);
@@ -86,7 +173,7 @@ export const useSupabaseChat = () => {
 
     setPresenceChannels(prev => ({ ...prev, [roomId]: channel }));
     return channel;
-  }, [presenceChannels]);
+  }, [presenceChannels, cleanupEmptyRooms]);
 
   // Set up message subscription for a room
   const setupMessageSubscription = useCallback((roomId: string) => {
@@ -473,16 +560,30 @@ export const useSupabaseChat = () => {
         delete newParticipants[currentRoom.id];
         return newParticipants;
       });
+
+      // Trigger cleanup check after leaving
+      setTimeout(() => {
+        cleanupEmptyRooms();
+      }, 5000); // Wait 5 seconds after leaving to check for cleanup
     }
 
     setCurrentRoom(null);
     setIsConnected(false);
-  }, [currentRoom, presenceChannels, messageChannels]);
+  }, [currentRoom, presenceChannels, messageChannels, cleanupEmptyRooms]);
 
-  // Initialize public rooms on mount
+  // Initialize public rooms on mount and set up periodic cleanup
   useEffect(() => {
     fetchPublicRooms();
-  }, [fetchPublicRooms]);
+    
+    // Set up periodic cleanup every 10 minutes
+    const cleanupInterval = setInterval(() => {
+      cleanupEmptyRooms();
+    }, 10 * 60 * 1000); // 10 minutes
+
+    return () => {
+      clearInterval(cleanupInterval);
+    };
+  }, [fetchPublicRooms, cleanupEmptyRooms]);
 
   // Cleanup all channels on unmount
   useEffect(() => {
