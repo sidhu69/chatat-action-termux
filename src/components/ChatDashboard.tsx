@@ -6,6 +6,7 @@ import { MessageCircle, Plus, Hash, Users, Clock } from 'lucide-react';
 import { useChat } from '@/contexts/ChatContext';
 import { CreateRoomModal } from './CreateRoomModal';
 import { JoinRoomModal } from './JoinRoomModal';
+import { ChatRoom } from '@/types/chat';
 import chatHero from '@/assets/chat-hero.jpg';
 
 export const ChatDashboard = () => {
@@ -15,7 +16,7 @@ export const ChatDashboard = () => {
 
   const publicRooms = supabaseChat.rooms.filter(room => room.type === 'public');
 
-  const handleJoinRoom = async (room: any) => {
+  const handleJoinRoom = async (room: ChatRoom) => {
     if (state.currentUser) {
       const joinedRoom = await supabaseChat.joinRoom(room.code);
       if (joinedRoom) {
@@ -36,9 +37,9 @@ export const ChatDashboard = () => {
     <div className="min-h-screen bg-gradient-primary">
       <div className="absolute inset-0 bg-gradient-secondary opacity-30" />
       <div className="absolute inset-0 overflow-hidden">
-        <img 
-          src={chatHero} 
-          alt="Chat Background" 
+        <img
+          src={chatHero}
+          alt="Chat Background"
           className="w-full h-full object-cover opacity-10"
         />
       </div>
@@ -90,14 +91,14 @@ export const ChatDashboard = () => {
             <Users className="w-6 h-6 text-primary" />
             Random Chat Rooms
           </h2>
-          
+
           {publicRooms.length === 0 ? (
             <Card className="bg-card/80 backdrop-blur-xl border-border/50">
               <CardContent className="p-8 text-center">
                 <MessageCircle className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-xl font-semibold mb-2">No public rooms yet</h3>
                 <p className="text-muted-foreground">Be the first to create a public chat room!</p>
-                <Button 
+                <Button
                   onClick={() => setShowCreateModal(true)}
                   className="mt-4 bg-gradient-primary hover:opacity-90"
                 >
@@ -132,7 +133,7 @@ export const ChatDashboard = () => {
                           </div>
                         </div>
                       </div>
-                      <Button 
+                      <Button
                         onClick={() => handleJoinRoom(room)}
                         className="bg-gradient-primary hover:opacity-90 transition-all duration-300"
                       >
