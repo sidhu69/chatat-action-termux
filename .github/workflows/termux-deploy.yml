@@ -1,0 +1,48 @@
+name: Deploy to Termux
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build project
+      run: npm run build
+    
+    - name: Deploy to Termux via SSH
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.TERMUX_HOST }}
+        username: ${{ secrets.TERMUX_USER }}
+        key: ${{ secrets.TERMUX_SSH_KEY }}
+        port: ${{ secrets.TERMUX_PORT }}
+        script: |
+          cd ~/chatat-app
+          git pull origin main
+          npm install
+          npm run build
+          pm2 restart chatat-server || pm2 start server/index.js --name chatat-server
+          pm2 save
+    
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "✅ Deployment successful!"
+        else
+          echo "❌ Deployment failed!"
+        fi
