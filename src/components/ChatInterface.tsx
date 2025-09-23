@@ -19,6 +19,7 @@ import { toast } from '@/hooks/use-toast';
 export const ChatInterface = () => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { state, dispatch, supabaseChat } = useChat();
 
@@ -38,25 +39,30 @@ export const ChatInterface = () => {
     scrollToBottom();
   }, [supabaseChat.currentRoom?.messages]);
 
-  // Debug logging
-  useEffect(() => {
-    if (supabaseChat.currentRoom) {
-      console.log('Current room participants:', currentRoomParticipants);
-      console.log('Participant count:', participantCount);
-    }
-  }, [currentRoomParticipants, participantCount, supabaseChat.currentRoom]);
-
   const handleSendMessage = async () => {
-    if (!message.trim() || !supabaseChat.currentRoom || !state.currentUser) return;
+    if (!message.trim() || !supabaseChat.currentRoom || !state.currentUser || isSending) return;
+
+    setIsSending(true);
+    const messageToSend = message.trim();
+    setMessage(''); // Clear input immediately
 
     const success = await supabaseChat.sendMessage(
-      message.trim(),
+      messageToSend,
       state.currentUser,
       supabaseChat.currentRoom.id
     );
 
-    if (success) {
-      setMessage('');
+    if (!success) {
+      setMessage(messageToSend); // Restore message on failure
+    }
+
+    setIsSending(false);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -88,9 +94,9 @@ export const ChatInterface = () => {
   if (!supabaseChat.currentRoom) return null;
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <div className="bg-card border-b border-border/50 p-4 flex items-center justify-between backdrop-blur-xl">
+    <div className="h-screen flex flex-col bg-background fixed inset-0 overflow-hidden">
+      {/* Header - Fixed */}
+      <div className="bg-card border-b border-border/50 p-4 flex items-center justify-between backdrop-blur-xl flex-shrink-0">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -137,11 +143,19 @@ export const ChatInterface = () => {
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-secondary/30">
+      {/* Messages - Scrollable */}
+      <div 
+        className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-secondary/30"
+        style={{ 
+          WebkitOverflowScrolling: 'touch',
+          touchAction: 'pan-y', // Only allow vertical scrolling
+          overscrollBehavior: 'contain' // Prevent scroll chaining
+        }}
+      >
         {supabaseChat.currentRoom.messages.map((msg) => {
           const isOwn = msg.userId === state.currentUser?.id;
           const isSystem = msg.type === 'system';
+          const isTemp = msg.id.toString().startsWith('temp-');
 
           if (isSystem) {
             return (
@@ -181,16 +195,22 @@ export const ChatInterface = () => {
                   </div>
                 )}
                 <div className={`
-                  p-3 rounded-2xl backdrop-blur-xl
+                  p-3 rounded-2xl backdrop-blur-xl transition-opacity duration-200
+                  ${isTemp ? 'opacity-70' : 'opacity-100'}
                   ${isOwn
                     ? 'bg-chat-bubble-own text-primary-foreground ml-auto'
                     : 'bg-chat-bubble-other text-foreground'
                   }
                 `}>
                   <p className="text-sm">{msg.content}</p>
-                  <p className={`text-xs mt-1 ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                    {formatTime(msg.timestamp)}
-                  </p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className={`text-xs ${isOwn ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                      {formatTime(msg.timestamp)}
+                    </p>
+                    {isTemp && (
+                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -228,23 +248,28 @@ export const ChatInterface = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
-      <div className="p-4 bg-card border-t border-border/50 backdrop-blur-xl">
+      {/* Message Input - Fixed */}
+      <div className="p-4 bg-card border-t border-border/50 backdrop-blur-xl flex-shrink-0">
         <div className="flex gap-3">
           <Input
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            onKeyPress={handleKeyPress}
             placeholder="Type a message..."
             className="flex-1 bg-background/50 border-border/50 focus:bg-background transition-all duration-300"
             maxLength={500}
+            disabled={isSending}
           />
           <Button
             onClick={handleSendMessage}
-            disabled={!message.trim()}
+            disabled={!message.trim() || isSending}
             className="bg-gradient-primary hover:opacity-90 transition-all duration-300"
           >
-            <Send className="w-4 h-4" />
+            {isSending ? (
+              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
           </Button>
         </div>
       </div>
