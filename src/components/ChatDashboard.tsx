@@ -18,9 +18,10 @@ export const ChatDashboard = () => {
 
   const handleJoinRoom = async (room: ChatRoom) => {
     if (state.currentUser) {
-      const joinedRoom = await supabaseChat.joinRoom(room.code);
+      console.log(`Joining room ${room.name} with code ${room.code}`);
+      const joinedRoom = await supabaseChat.joinRoom(room.code, state.currentUser);
       if (joinedRoom) {
-        dispatch({ type: 'JOIN_ROOM', payload: joinedRoom });
+        console.log('Successfully joined room from dashboard');
       }
     }
   };
@@ -125,7 +126,7 @@ export const ChatDashboard = () => {
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <div className="flex items-center gap-1">
                             <Users className="w-4 h-4" />
-                            {room.participants.length} participants
+                            {room.activeParticipantCount} participants
                           </div>
                           <div className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
