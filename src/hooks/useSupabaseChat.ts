@@ -26,6 +26,8 @@ export const useSupabaseChat = () => {
       return presenceChannels[roomId];
     }
 
+    console.log(`Creating presence channel for room ${roomId}`, user ? `with user ${user.username}` : 'without user');
+
     const channel = supabase
       .channel(`room-presence:${roomId}`)
       .on('presence', { event: 'sync' }, () => {
@@ -37,12 +39,12 @@ export const useSupabaseChat = () => {
           isActive: true,
         }));
 
+        console.log(`Presence sync for room ${roomId}:`, participantList);
+
         setRoomParticipants(prev => ({
           ...prev,
           [roomId]: participantList
         }));
-
-        console.log(`Room ${roomId} participants updated:`, participantList.length);
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         console.log('User joined room:', newPresences);
@@ -51,14 +53,15 @@ export const useSupabaseChat = () => {
         console.log('User left room:', leftPresences);
       })
       .subscribe(async (status) => {
+        console.log(`Presence channel status for room ${roomId}:`, status);
         if (status === 'SUBSCRIBED' && user) {
           // Track current user's presence
-          await channel.track({
+          const trackResult = await channel.track({
             user_id: user.id,
             username: user.username,
             joined_at: new Date().toISOString(),
           });
-          console.log(`User ${user.username} tracking presence in room ${roomId}`);
+          console.log(`User ${user.username} tracking presence in room ${roomId}:`, trackResult);
         }
       });
 
@@ -105,8 +108,10 @@ export const useSupabaseChat = () => {
             console.error('Error fetching messages:', messagesError);
           }
 
-          // Track participants for this room (without user tracking for public rooms)
-          trackRoomParticipants(room.id);
+          // Track participants for this room (without user tracking for public rooms listing)
+          if (!presenceChannels[room.id]) {
+            trackRoomParticipants(room.id);
+          }
 
           const participants = roomParticipants[room.id] || [];
 
@@ -140,7 +145,7 @@ export const useSupabaseChat = () => {
         variant: "destructive",
       });
     }
-  }, [toast, trackRoomParticipants, roomParticipants]);
+  }, [toast, trackRoomParticipants, roomParticipants, presenceChannels]);
 
   // Update room participant counts when participants change
   useEffect(() => {
@@ -153,7 +158,7 @@ export const useSupabaseChat = () => {
     );
   }, [roomParticipants]);
 
-  // Create a new room
+  // Create a new room and automatically join it
   const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
     try {
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -190,6 +195,14 @@ export const useSupabaseChat = () => {
         createdAt: new Date(data.created_at),
       };
 
+      // Automatically join the created room
+      setCurrentRoom(newRoom);
+      setIsConnected(true);
+
+      // Start tracking presence for the creator
+      trackRoomParticipants(newRoom.id, user);
+
+      // Add to rooms list if public
       if (data.is_public) {
         setRooms(prev => [newRoom, ...prev]);
       }
@@ -209,7 +222,7 @@ export const useSupabaseChat = () => {
       });
       return null;
     }
-  }, [toast]);
+  }, [toast, trackRoomParticipants]);
 
   // Join a room by code with proper presence tracking
   const joinRoom = useCallback(async (code: string, user?: User) => {
@@ -311,6 +324,7 @@ export const useSupabaseChat = () => {
   // Enhanced leave room function to properly cleanup presence
   const leaveRoom = useCallback(() => {
     if (currentRoom && presenceChannels[currentRoom.id]) {
+      console.log(`Leaving room ${currentRoom.id}`);
       // Untrack presence and remove channel
       presenceChannels[currentRoom.id].untrack();
       supabase.removeChannel(presenceChannels[currentRoom.id]);
@@ -320,6 +334,13 @@ export const useSupabaseChat = () => {
         const newChannels = { ...prev };
         delete newChannels[currentRoom.id];
         return newChannels;
+      });
+
+      // Clear room participants for this room
+      setRoomParticipants(prev => {
+        const newParticipants = { ...prev };
+        delete newParticipants[currentRoom.id];
+        return newParticipants;
       });
     }
 
