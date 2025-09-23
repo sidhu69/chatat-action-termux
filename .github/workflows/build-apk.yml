@@ -30,6 +30,13 @@ jobs:
     - name: Build web app
       run: npm run build
 
+    - name: Check build output
+      run: |
+        echo "Contents of dist folder:"
+        ls -la dist/
+        echo "Index.html exists:"
+        ls -la dist/index.html
+
   build-android:
     needs: test
     runs-on: ubuntu-latest
@@ -54,18 +61,29 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Build web app
+    - name: Build web app for production
       run: npm run build
+
+    - name: Verify build output
+      run: |
+        echo "Build verification:"
+        ls -la dist/
+        echo "Checking if index.html exists:"
+        cat dist/index.html | head -10
 
     - name: Add Android platform
       run: npx cap add android
 
-    - name: Sync Capacitor
-      run: npx cap sync android
+    - name: Sync Capacitor with build verification
+      run: |
+        npx cap sync android
+        echo "Android assets after sync:"
+        ls -la android/app/src/main/assets/public/
 
     - name: Build Android APK
       run: |
         cd android
+        ./gradlew clean
         ./gradlew assembleDebug
 
     - name: Upload APK artifact
