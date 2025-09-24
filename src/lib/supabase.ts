@@ -19,7 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export interface Database {
   public: {
     Tables: {
-      users: {
+      profile: {
         Row: {
           id: string;
           email: string;
@@ -39,32 +39,6 @@ export interface Database {
           email?: string;
           username?: string;
           updated_at?: string;
-        };
-      };
-      chat_rooms: {
-        Row: {
-          id: string;
-          name: string;
-          code: string;
-          is_public: boolean;
-          created_at: string;
-          created_by: string;
-        };
-        Insert: {
-          id?: string;
-          name: string;
-          code: string;
-          is_public?: boolean;
-          created_at?: string;
-          created_by: string;
-        };
-        Update: {
-          id?: string;
-          name?: string;
-          code?: string;
-          is_public?: boolean;
-          created_at?: string;
-          created_by?: string;
         };
       };
       messages: {
