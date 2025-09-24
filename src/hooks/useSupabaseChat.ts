@@ -234,7 +234,6 @@ export const useSupabaseChat = () => {
   }, [messageChannels]);
 
   // Update current room participants when roomParticipants changes
-  // FIXED: Added currentRoom to dependencies and used memoized currentRoomId
   useEffect(() => {
     if (currentRoomId && roomParticipants[currentRoomId]) {
       const updatedParticipants = roomParticipants[currentRoomId];
@@ -245,9 +244,9 @@ export const useSupabaseChat = () => {
         activeParticipantCount: updatedParticipants.length,
       } : null);
     }
-  }, [roomParticipants, currentRoomId]); // Fixed: Added currentRoomId to dependencies
+  }, [roomParticipants, currentRoomId]);
 
-  // Fetch all public rooms with participant counts - FIXED: Removed roomParticipants dependency
+  // Fetch all public rooms with participant counts
   const fetchPublicRooms = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -303,7 +302,7 @@ export const useSupabaseChat = () => {
         variant: "destructive",
       });
     }
-  }, [toast]); // FIXED: Removed roomParticipants dependency to prevent infinite loops
+  }, [toast, roomParticipants]);
 
   // Update rooms when participants change
   useEffect(() => {
