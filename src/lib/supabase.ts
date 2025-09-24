@@ -19,6 +19,29 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export interface Database {
   public: {
     Tables: {
+      // Add users table for authentication
+      users: {
+        Row: {
+          id: string;
+          email: string;
+          username: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          username: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          username?: string;
+          updated_at?: string;
+        };
+      };
       chat_rooms: {
         Row: {
           id: string;
