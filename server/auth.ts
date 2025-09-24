@@ -7,10 +7,9 @@ import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
 
-declare global {
-  namespace Express {
-    interface User extends SelectUser {}
-  }
+// Fix: Replace namespace with module augmentation
+declare module "express-serve-static-core" {
+  interface User extends SelectUser {}
 }
 
 const scryptAsync = promisify(scrypt);
@@ -53,6 +52,7 @@ export function setupAuth(app: Express) {
   );
 
   passport.serializeUser((user, done) => done(null, user.id));
+
   passport.deserializeUser(async (id: string, done) => {
     const user = await storage.getUser(id);
     done(null, user);
@@ -61,10 +61,11 @@ export function setupAuth(app: Express) {
   app.post("/api/register", async (req, res, next) => {
     const existingUser = await storage.getUserByUsernameOrEmail(req.body.username);
     const existingEmail = await storage.getUserByEmail(req.body.email);
-    
+
     if (existingUser) {
       return res.status(400).send("Username already exists");
     }
+
     if (existingEmail) {
       return res.status(400).send("Email already exists");
     }
@@ -95,4 +96,4 @@ export function setupAuth(app: Express) {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json(req.user);
   });
-    }
+}
