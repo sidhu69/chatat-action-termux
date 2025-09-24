@@ -42,8 +42,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
     try {
       await signUp(email, password, username);
       setSuccess('Account created successfully! Please check your email to verify your account.');
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during registration');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred during registration';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
