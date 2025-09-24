@@ -1,41 +1,61 @@
-import { db } from "./db";
-import { users, type User, type InsertUser } from "@shared/schema";
-import { eq, or } from "drizzle-orm";
-import session from "express-session";
-import ConnectPgSimple from "connect-pg-simple";
-import { pool } from "./db";
+import { createClient } from '@supabase/supabase-js';
 
-const PgSession = ConnectPgSimple(session);
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export const storage = {
-  sessionStore: new PgSession({
-    pool: pool,
-    tableName: 'session',
-    createTableIfMissing: true,
-  }),
+  sessionStore: null, // Not needed with Supabase Auth
 
-  async createUser(userData: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(userData).returning();
-    return user;
+  async createUser(userData: any) {
+    const { data, error } = await supabase
+      .from('profile')
+      .insert({
+        email: userData.email,
+        username: userData.username,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
   },
 
-  async getUser(id: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || null;
+  async getUser(id: string) {
+    const { data, error } = await supabase
+      .from('profile')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) return null;
+    return data;
   },
 
-  async getUserByUsernameOrEmail(usernameOrEmail: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(
-      or(
-        eq(users.username, usernameOrEmail),
-        eq(users.email, usernameOrEmail)
-      )
-    );
-    return user || null;
+  async getUserByUsernameOrEmail(usernameOrEmail: string) {
+    const { data, error } = await supabase
+      .from('profile')
+      .select('*')
+      .or(`username.eq.${usernameOrEmail},email.eq.${usernameOrEmail}`)
+      .single();
+
+    if (error) return null;
+    return data;
   },
 
-  async getUserByEmail(email: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user || null;
+  async getUserByEmail(email: string) {
+    const { data, error } = await supabase
+      .from('profile')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (error) return null;
+    return data;
   },
 };
