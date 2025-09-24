@@ -24,6 +24,8 @@ export interface Database {
           id: string;
           email: string;
           username: string;
+          display_name: string;
+          profile_picture?: string;
           created_at: string;
           updated_at: string;
         };
@@ -31,6 +33,8 @@ export interface Database {
           id?: string;
           email: string;
           username: string;
+          display_name?: string;
+          profile_picture?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -38,6 +42,8 @@ export interface Database {
           id?: string;
           email?: string;
           username?: string;
+          display_name?: string;
+          profile_picture?: string;
           updated_at?: string;
         };
       };
