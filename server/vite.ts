@@ -1,5 +1,5 @@
 import { createServer as createViteServer } from "vite";
-import { Express } from "express";
+import { Express, Request, Response, NextFunction } from "express";
 import { Server } from "http";
 
 export async function setupVite(app: Express, server: Server) {
@@ -7,11 +7,12 @@ export async function setupVite(app: Express, server: Server) {
     server: { middlewareMode: true },
     appType: "custom",
   });
+  
   return vite.middlewares;
 }
 
 export function serveStatic() {
-  return (req: any, res: any, next: any) => next();
+  return (req: Request, res: Response, next: NextFunction) => next();
 }
 
 export function log(message: string) {
