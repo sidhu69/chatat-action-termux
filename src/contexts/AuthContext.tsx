@@ -2,11 +2,16 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
+interface AuthResponse {
+  user: User | null;
+  session: Session | null;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  signUp: (email: string, password: string, username: string) => Promise<{ user: User | null; session: Session | null } | { error: AuthError }>;
-  signIn: (email: string, password: string) => Promise<{ user: User | null; session: Session | null } | { error: AuthError }>;
+  signUp: (email: string, password: string, username: string) => Promise<AuthResponse>;
+  signIn: (email: string, password: string) => Promise<AuthResponse>;
   signOut: () => Promise<void>;
   isLoading: boolean;
 }
@@ -38,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, username: string) => {
+  const signUp = async (email: string, password: string, username: string): Promise<AuthResponse> => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -64,20 +69,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (profileError) throw profileError;
     }
 
-    return data;
+    return { user: data.user, session: data.session };
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string): Promise<AuthResponse> => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) throw error;
-    return data;
+    return { user: data.user, session: data.session };
   };
 
-  const signOut = async () => {
+  const signOut = async (): Promise<void> => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };
