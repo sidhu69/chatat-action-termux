@@ -1,101 +1,98 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-
-interface User {
-  id: string;
-  username: string;
-  email: string;
-}
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  session: Session | null;
+  signUp: (email: string, password: string, username: string) => Promise<any>;
+  signIn: (email: string, password: string) => Promise<any>;
+  signOut: () => Promise<void>;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in
-    fetch('/api/user', {
-      credentials: 'include',
-    })
-      .then(res => {
-        if (res.ok) {
-          return res.json();
-        }
-        return null;
-      })
-      .then(userData => {
-        if (userData) {
-          setUser(userData);
-        }
-      })
-      .catch(() => {
-        // User not logged in
-      })
-      .finally(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
         setIsLoading(false);
-      });
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (username: string, password: string) => {
-    const response = await fetch('/api/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+  const signUp = async (email: string, password: string, username: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username,
+        },
       },
-      body: JSON.stringify({ username, password }),
-      credentials: 'include',
     });
 
-    if (response.ok) {
-      const userData = await response.json();
-      setUser(userData);
-    } else {
-      const error = await response.text();
-      throw new Error(error);
+    if (error) throw error;
+
+    // Insert user data into custom users table
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: data.user.id,
+          email: data.user.email!,
+          username,
+        });
+
+      if (profileError) throw profileError;
     }
+
+    return data;
   };
 
-  const register = async (username: string, email: string, password: string) => {
-    const response = await fetch('/api/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ username, email, password }),
-      credentials: 'include',
+  const signIn = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
 
-    if (response.ok) {
-      const userData = await response.json();
-      setUser(userData);
-    } else {
-      const error = await response.text();
-      throw new Error(error);
-    }
+    if (error) throw error;
+    return data;
   };
 
-  const logout = async () => {
-    await fetch('/api/logout', {
-      method: 'POST',
-      credentials: 'include',
-    });
-    setUser(null);
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  };
+
+  const value = {
+    user,
+    session,
+    signUp,
+    signIn,
+    signOut,
+    isLoading,
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
