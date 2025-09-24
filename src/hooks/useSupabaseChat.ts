@@ -316,27 +316,35 @@ export const useSupabaseChat = () => {
   }, [roomParticipants]);
 
   // Create a new room and automatically join it
-  const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
-    try {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
+  try {
+    // Validate user ID is a proper UUID
+    if (!user.id || typeof user.id !== 'string') {
+      throw new Error('Invalid user ID');
+    }
 
-      console.log('Creating room with:', { name, code, isPublic, userId: user.id });
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-      const { data, error } = await supabase
-        .from('chat_rooms')
-        .insert({
-          name,
-          code,
-          is_public: isPublic,
-          created_by: user.id,
-        })
-        .select()
-        .single();
+    console.log('Creating room with:', { name, code, isPublic, userId: user.id });
+    console.log('User ID type:', typeof user.id, 'User ID value:', user.id);
 
-      if (error) {
-        console.error('Supabase error details:', error);
-        throw error;
-      }
+    const { data, error } = await supabase
+      .from('chat_rooms')
+      .insert({
+        name,
+        code,
+        is_public: isPublic,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error details:', error);
+      throw error;
+    }
+
+    // ... rest of your createRoom function
 
       console.log('Room created successfully:', data);
 
