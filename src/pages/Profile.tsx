@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Camera, Edit2, Save, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -35,13 +35,7 @@ export const Profile: React.FC = () => {
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
 
-  useEffect(() => {
-    if (user) {
-      fetchProfile();
-    }
-  }, [user]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!user) return;
 
     setIsLoading(true);
@@ -83,13 +77,20 @@ export const Profile: React.FC = () => {
         setUsername(data.username);
         setBio(data.bio || '');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching profile:', err);
-      setError(`Failed to load profile: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setError(`Failed to load profile: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user, fetchProfile]);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -136,9 +137,10 @@ export const Profile: React.FC = () => {
       setSuccess('Profile picture updated successfully!');
       
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error uploading image:', err);
-      setError(`Failed to upload image: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setError(`Failed to upload image: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
@@ -183,9 +185,10 @@ export const Profile: React.FC = () => {
       setIsEditing(false);
       
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error saving profile:', err);
-      setError(`Failed to save profile: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setError(`Failed to save profile: ${errorMessage}`);
     } finally {
       setIsSaving(false);
     }
@@ -280,7 +283,7 @@ export const Profile: React.FC = () => {
                 <div className="flex flex-col items-center">
                   <div className="relative">
                     <UserAvatar
-                      profilePicture={profile.profile_picture}
+                      profilePicture={profile.profile_picture || undefined}
                       username={profile.username}
                       size="lg"
                     />
