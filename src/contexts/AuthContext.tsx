@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session, AuthError } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
 interface AuthResponse {
@@ -56,10 +56,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (error) throw error;
 
-    // Insert user data into custom users table
+    // Insert user data into profile table
     if (data.user) {
       const { error: profileError } = await supabase
-        .from('users')
+        .from('profile')
         .insert({
           id: data.user.id,
           email: data.user.email!,
