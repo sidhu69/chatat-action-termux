@@ -14,9 +14,9 @@ interface UserProfile {
   id: string;
   username: string;
   email: string;
-  display_name: string;
-  bio?: string;
-  profile_picture?: string;
+  display_name: string | null;
+  bio: string | null;
+  profile_picture: string | null;
   created_at: string;
 }
 
@@ -32,42 +32,21 @@ export const Profile: React.FC = () => {
 
   // Form states
   const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
 
   useEffect(() => {
-  const fetchProfile = async () => {
-    if (!user) return;
-    
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('profile')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-      
-      setProfile(data);
-      setDisplayName(data.display_name || data.username);
-      setBio(data.bio || '');
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-      setError('Failed to load profile');
-    } finally {
-      setIsLoading(false);
+    if (user) {
+      fetchProfile();
     }
-  };
-
-  if (user) {
-    fetchProfile();
-  }
-}, [user]);
+  }, [user]);
 
   const fetchProfile = async () => {
     if (!user) return;
-    
+
     setIsLoading(true);
+    setError('');
+
     try {
       const { data, error } = await supabase
         .from('profile')
@@ -75,14 +54,38 @@ export const Profile: React.FC = () => {
         .eq('id', user.id)
         .single();
 
-      if (error) throw error;
-      
-      setProfile(data);
-      setDisplayName(data.display_name || data.username);
-      setBio(data.bio || '');
-    } catch (err) {
+      if (error) {
+        // If profile doesn't exist, create it
+        if (error.code === 'PGRST116') {
+          const { data: newProfile, error: createError } = await supabase
+            .from('profile')
+            .insert({
+              id: user.id,
+              email: user.email!,
+              username: user.email!.split('@')[0],
+              display_name: user.email!.split('@')[0],
+            })
+            .select('*')
+            .single();
+
+          if (createError) throw createError;
+          
+          setProfile(newProfile);
+          setDisplayName(newProfile.display_name || newProfile.username);
+          setUsername(newProfile.username);
+          setBio(newProfile.bio || '');
+        } else {
+          throw error;
+        }
+      } else {
+        setProfile(data);
+        setDisplayName(data.display_name || data.username);
+        setUsername(data.username);
+        setBio(data.bio || '');
+      }
+    } catch (err: any) {
       console.error('Error fetching profile:', err);
-      setError('Failed to load profile');
+      setError(`Failed to load profile: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -93,8 +96,20 @@ export const Profile: React.FC = () => {
     if (!file || !user) return;
 
     setIsLoading(true);
+    setError('');
+
     try {
-      // Upload image to Supabase Storage
+      // Delete old image if exists
+      if (profile?.profile_picture) {
+        const oldFileName = profile.profile_picture.split('/').pop();
+        if (oldFileName) {
+          await supabase.storage
+            .from('profile-pictures')
+            .remove([oldFileName]);
+        }
+      }
+
+      // Upload new image
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
       
@@ -119,9 +134,11 @@ export const Profile: React.FC = () => {
 
       setProfile(prev => prev ? { ...prev, profile_picture: publicUrl } : prev);
       setSuccess('Profile picture updated successfully!');
-    } catch (err) {
+      
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
       console.error('Error uploading image:', err);
-      setError('Failed to upload image');
+      setError(`Failed to upload image: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -130,28 +147,45 @@ export const Profile: React.FC = () => {
   const handleSaveProfile = async () => {
     if (!user || !profile) return;
 
+    if (!displayName.trim()) {
+      setError('Display name is required');
+      return;
+    }
+
+    if (!username.trim()) {
+      setError('Username is required');
+      return;
+    }
+
     setIsSaving(true);
+    setError('');
+
     try {
       const { error } = await supabase
         .from('profile')
-        .update({ 
-          display_name: displayName,
-          bio: bio 
+        .update({
+          display_name: displayName.trim(),
+          username: username.trim(),
+          bio: bio.trim(),
         })
         .eq('id', user.id);
 
       if (error) throw error;
 
-      setProfile(prev => prev ? { 
-        ...prev, 
-        display_name: displayName,
-        bio: bio 
+      setProfile(prev => prev ? {
+        ...prev,
+        display_name: displayName.trim(),
+        username: username.trim(),
+        bio: bio.trim(),
       } : prev);
+
       setSuccess('Profile updated successfully!');
       setIsEditing(false);
-    } catch (err) {
+      
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
       console.error('Error saving profile:', err);
-      setError('Failed to save profile');
+      setError(`Failed to save profile: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -185,7 +219,6 @@ export const Profile: React.FC = () => {
             </Button>
             <h1 className="text-xl font-semibold">Profile</h1>
           </div>
-          
           <div className="flex items-center gap-2">
             {!isEditing ? (
               <Button
@@ -203,7 +236,9 @@ export const Profile: React.FC = () => {
                   onClick={() => {
                     setIsEditing(false);
                     setDisplayName(profile?.display_name || profile?.username || '');
+                    setUsername(profile?.username || '');
                     setBio(profile?.bio || '');
+                    setError('');
                   }}
                 >
                   <X className="h-4 w-4" />
@@ -256,6 +291,7 @@ export const Profile: React.FC = () => {
                         accept="image/*"
                         onChange={handleImageUpload}
                         className="hidden"
+                        disabled={isLoading}
                       />
                     </label>
                   </div>
@@ -263,8 +299,23 @@ export const Profile: React.FC = () => {
 
                 {/* Profile Info */}
                 <div className="flex-1 space-y-4">
-                  <div className="flex items-center gap-4">
-                    <h2 className="text-2xl font-bold">{profile.username}</h2>
+                  {/* Username */}
+                  <div>
+                    {isEditing ? (
+                      <div>
+                        <Label htmlFor="username">Username</Label>
+                        <Input
+                          id="username"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="Enter your username"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <h2 className="text-2xl font-bold">{profile.username}</h2>
+                      </div>
+                    )}
                   </div>
 
                   {/* Stats */}
@@ -297,7 +348,7 @@ export const Profile: React.FC = () => {
                       </div>
                     ) : (
                       <div>
-                        <div className="font-semibold">{profile.display_name}</div>
+                        <div className="font-semibold">{profile.display_name || profile.username}</div>
                       </div>
                     )}
                   </div>
@@ -330,19 +381,15 @@ export const Profile: React.FC = () => {
               <h3 className="text-lg font-semibold mb-4">Account Information</h3>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Username</Label>
-                  <Input value={profile.username} disabled className="bg-gray-50" />
-                </div>
-                <div>
                   <Label>Email</Label>
                   <Input value={profile.email} disabled className="bg-gray-50" />
                 </div>
                 <div>
                   <Label>Member Since</Label>
-                  <Input 
-                    value={new Date(profile.created_at).toLocaleDateString()} 
-                    disabled 
-                    className="bg-gray-50" 
+                  <Input
+                    value={new Date(profile.created_at).toLocaleDateString()}
+                    disabled
+                    className="bg-gray-50"
                   />
                 </div>
               </div>
