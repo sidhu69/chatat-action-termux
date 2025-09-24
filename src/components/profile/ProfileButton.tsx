@@ -1,20 +1,31 @@
 import React from 'react';
 import { User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useChat } from '@/contexts/ChatContext';
 
 export const ProfileButton: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { supabaseChat } = useChat();
 
-  if (!user) return null;
+  // Hide profile button when:
+  // 1. User is not logged in
+  // 2. Not on home page (/) 
+  // 3. Currently in a chat room (when supabaseChat.currentRoom exists)
+  if (!user || 
+      location.pathname !== '/' || 
+      supabaseChat.currentRoom) {
+    return null;
+  }
 
   return (
     <button
       onClick={() => navigate('/profile')}
-      className="fixed bottom-4 right-4 w-12 h-12 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center shadow-lg transition-colors z-50"
+      className="fixed bottom-4 right-4 w-14 h-14 bg-gradient-primary hover:opacity-90 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 z-50 backdrop-blur-sm border border-white/20"
     >
-      <User className="h-6 w-6 text-white" />
+      <User className="h-6 w-6 text-white"/>
     </button>
   );
 };
