@@ -35,10 +35,34 @@ export const Profile: React.FC = () => {
   const [bio, setBio] = useState('');
 
   useEffect(() => {
-    if (user) {
-      fetchProfile();
+  const fetchProfile = async () => {
+    if (!user) return;
+    
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profile')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      
+      setProfile(data);
+      setDisplayName(data.display_name || data.username);
+      setBio(data.bio || '');
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError('Failed to load profile');
+    } finally {
+      setIsLoading(false);
     }
-  }, [user]);
+  };
+
+  if (user) {
+    fetchProfile();
+  }
+}, [user]);
 
   const fetchProfile = async () => {
     if (!user) return;
