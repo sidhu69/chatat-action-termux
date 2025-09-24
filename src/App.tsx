@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ProfileButton } from "@/components/profile/ProfileButton"; // ADD THIS
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -35,9 +36,9 @@ const AppContent: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route 
-          path="/auth" 
-          element={user ? <Navigate to="/" replace /> : <Auth />} 
+        <Route
+          path="/auth"
+          element={user ? <Navigate to="/" replace /> : <Auth />}
         />
         <Route
           path="/"
@@ -49,6 +50,7 @@ const AppContent: React.FC = () => {
         />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      {user && <ProfileButton />} {/* ADD THIS */}
     </BrowserRouter>
   );
 };
