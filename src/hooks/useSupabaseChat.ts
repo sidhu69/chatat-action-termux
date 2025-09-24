@@ -247,7 +247,7 @@ export const useSupabaseChat = () => {
     }
   }, [roomParticipants, currentRoomId]); // Fixed: Added currentRoomId to dependencies
 
-  // Fetch all public rooms with participant counts
+  // Fetch all public rooms with participant counts - FIXED: Removed roomParticipants dependency
   const fetchPublicRooms = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -270,6 +270,7 @@ export const useSupabaseChat = () => {
             console.error('Error fetching messages:', messagesError);
           }
 
+          // Get current participants at fetch time
           const participants = roomParticipants[room.id] || [];
 
           return {
@@ -302,7 +303,7 @@ export const useSupabaseChat = () => {
         variant: "destructive",
       });
     }
-  }, [toast, roomParticipants]);
+  }, [toast]); // FIXED: Removed roomParticipants dependency to prevent infinite loops
 
   // Update rooms when participants change
   useEffect(() => {
