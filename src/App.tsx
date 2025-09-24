@@ -5,9 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ChatProvider } from "@/contexts/ChatContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { ProfileButton } from "@/components/profile/ProfileButton"; // ADD THIS
+import { ProfileButton } from "@/components/profile/ProfileButton";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,9 +49,17 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
-      {user && <ProfileButton />} {/* ADD THIS */}
+      {user && <ProfileButton />}
     </BrowserRouter>
   );
 };
