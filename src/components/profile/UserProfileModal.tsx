@@ -1,130 +1,59 @@
 import React, { useState, useEffect } from 'react';
-import { X, Camera, User, Save } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { X, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
-interface ProfileModalProps {
+interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userId: string;
 }
 
 interface UserProfile {
-  id: string;
   username: string;
-  email: string;
   display_name: string;
   profile_picture?: string;
 }
 
-export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
-  const { user } = useAuth();
+export const UserProfileModal: React.FC<UserProfileModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  userId 
+}) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    if (!isOpen || !user) return;
+    if (!isOpen || !userId) return;
 
-    const fetchProfile = async () => {
+    const fetchUserProfile = async () => {
       setIsLoading(true);
       try {
         const { data, error } = await supabase
           .from('profile')
-          .select('*')
-          .eq('id', user.id)
+          .select('username, display_name, profile_picture')
+          .eq('id', userId)
           .single();
 
         if (error) throw error;
-        
         setProfile(data);
-        setDisplayName(data.display_name || data.username);
       } catch (err) {
-        console.error('Error fetching profile:', err);
-        setError('Failed to load profile');
+        console.error('Error fetching user profile:', err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchProfile();
-  }, [isOpen, user]);
-
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user) return;
-
-    setIsLoading(true);
-    try {
-      // Upload image to Supabase Storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('profile-pictures')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-pictures')
-        .getPublicUrl(fileName);
-
-      // Update profile with new image URL
-      const { error: updateError } = await supabase
-        .from('profile')
-        .update({ profile_picture: publicUrl })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
-
-      setProfile(prev => prev ? { ...prev, profile_picture: publicUrl } : prev);
-      setSuccess('Profile picture updated successfully!');
-    } catch (err) {
-      console.error('Error uploading image:', err);
-      setError('Failed to upload image');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    if (!user || !profile) return;
-
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from('profile')
-        .update({ display_name: displayName })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      setProfile(prev => prev ? { ...prev, display_name: displayName } : prev);
-      setSuccess('Profile updated successfully!');
-    } catch (err) {
-      console.error('Error saving profile:', err);
-      setError('Failed to save profile');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    fetchUserProfile();
+  }, [isOpen, userId]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-sm w-full">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold">My Profile</h2>
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="text-lg font-semibold">User Profile</h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-full"
@@ -134,98 +63,30 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert>
-              <AlertDescription>{success}</AlertDescription>
-            </Alert>
-          )}
-
+        <div className="p-6">
           {isLoading ? (
             <div className="text-center py-8">Loading...</div>
           ) : profile ? (
-            <>
+            <div className="flex flex-col items-center space-y-4">
               {/* Profile Picture */}
-              <div className="flex flex-col items-center space-y-4">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                    {profile.profile_picture ? (
-                      <img
-                        src={profile.profile_picture}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <User className="h-12 w-12 text-gray-400" />
-                    )}
-                  </div>
-                  <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 rounded-full p-2 cursor-pointer">
-                    <Camera className="h-4 w-4 text-white" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Profile Info */}
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    value={profile.username}
-                    disabled
-                    className="bg-gray-50"
+              <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                {profile.profile_picture ? (
+                  <img
+                    src={profile.profile_picture}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
                   />
-                </div>
-
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    value={profile.email}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="displayName">Display Name</Label>
-                  <Input
-                    id="displayName"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Enter your display name"
-                  />
-                </div>
-              </div>
-
-              {/* Save Button */}
-              <Button
-                onClick={handleSaveProfile}
-                disabled={isSaving}
-                className="w-full"
-              >
-                {isSaving ? (
-                  <>Saving...</>
                 ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Changes
-                  </>
+                  <User className="h-10 w-10 text-gray-400" />
                 )}
-              </Button>
-            </>
+              </div>
+
+              {/* User Info */}
+              <div className="text-center">
+                <h3 className="text-xl font-semibold">{profile.display_name}</h3>
+                <p className="text-gray-500">@{profile.username}</p>
+              </div>
+            </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
               Failed to load profile
