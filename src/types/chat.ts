@@ -1,7 +1,8 @@
 export interface User {
   id: string;
   username: string;
-  avatar?: string;
+  display_name?: string;
+  profile_picture?: string;
 }
 
 export interface Message {
@@ -9,6 +10,8 @@ export interface Message {
   content: string;
   userId: string;
   username: string;
+  display_name?: string;
+  profile_picture?: string;
   timestamp: Date;
   type: 'text' | 'system';
 }
@@ -16,6 +19,8 @@ export interface Message {
 export interface Participant {
   id: string;
   username: string;
+  display_name?: string;
+  profile_picture?: string;
   joinedAt: Date;
   isActive: boolean;
 }
