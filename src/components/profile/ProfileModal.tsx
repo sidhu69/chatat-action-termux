@@ -30,33 +30,31 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    if (isOpen && user) {
-      fetchProfile();
-    }
+    if (!isOpen || !user) return;
+
+    const fetchProfile = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('profile')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+        
+        setProfile(data);
+        setDisplayName(data.display_name || data.username);
+      } catch (err) {
+        console.error('Error fetching profile:', err);
+        setError('Failed to load profile');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
   }, [isOpen, user]);
-
-  const fetchProfile = async () => {
-    if (!user) return;
-    
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('profile')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-      
-      setProfile(data);
-      setDisplayName(data.display_name || data.username);
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-      setError('Failed to load profile');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
