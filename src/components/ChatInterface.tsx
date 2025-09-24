@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   ArrowLeft,
   Send,
@@ -15,19 +14,23 @@ import {
 import { useChat } from '@/contexts/ChatContext';
 import { Message } from '@/types/chat';
 import { toast } from '@/hooks/use-toast';
+import { UserAvatar } from '@/components/profile/UserAvatar';
+import { UserProfileModal } from '@/components/profile/UserProfileModal';
 
 export const ChatInterface = () => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const { state, dispatch, supabaseChat } = useChat();
 
   // Get current room participants from the main chat hook
-  const currentRoomParticipants = supabaseChat.currentRoom 
+  const currentRoomParticipants = supabaseChat.currentRoom
     ? supabaseChat.roomParticipants[supabaseChat.currentRoom.id] || []
     : [];
-  
+
   const participantCount = currentRoomParticipants.length;
   const onlineUsers = currentRoomParticipants.map(p => p.username);
 
@@ -144,9 +147,9 @@ export const ChatInterface = () => {
       </div>
 
       {/* Messages - Scrollable */}
-      <div 
+      <div
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-secondary/30"
-        style={{ 
+        style={{
           WebkitOverflowScrolling: 'touch',
           touchAction: 'pan-y', // Only allow vertical scrolling
           overscrollBehavior: 'contain' // Prevent scroll chaining
@@ -171,11 +174,12 @@ export const ChatInterface = () => {
             <div key={msg.id} className={`flex gap-3 ${isOwn ? 'justify-end' : 'justify-start'}`}>
               {!isOwn && (
                 <div className="relative">
-                  <Avatar className="w-8 h-8 border-2 border-border/50">
-                    <AvatarFallback className="bg-primary/20 text-primary font-semibold text-sm">
-                      {msg.username.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    profilePicture={msg.profile_picture}
+                    username={msg.username}
+                    size="sm"
+                    onClick={() => setSelectedUserId(msg.userId)}
+                  />
                   {/* Show online indicator if user is online */}
                   {onlineUsers.includes(msg.username) && (
                     <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
@@ -187,13 +191,14 @@ export const ChatInterface = () => {
                 {!isOwn && (
                   <div className="flex items-center gap-1 mb-1">
                     <p className="text-xs text-muted-foreground font-medium">
-                      {msg.username}
+                      {msg.display_name || msg.username}
                     </p>
                     {onlineUsers.includes(msg.username) && (
                       <Circle className="w-2 h-2 fill-green-500 text-green-500" />
                     )}
                   </div>
                 )}
+
                 <div className={`
                   p-3 rounded-2xl backdrop-blur-xl transition-opacity duration-200
                   ${isTemp ? 'opacity-70' : 'opacity-100'}
@@ -216,11 +221,12 @@ export const ChatInterface = () => {
 
               {isOwn && (
                 <div className="relative">
-                  <Avatar className="w-8 h-8 border-2 border-primary/50">
-                    <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
-                      {msg.username.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    profilePicture={msg.profile_picture}
+                    username={msg.username}
+                    size="sm"
+                    onClick={() => setSelectedUserId(msg.userId)}
+                  />
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full" />
                 </div>
               )}
@@ -230,11 +236,10 @@ export const ChatInterface = () => {
 
         {isTyping && (
           <div className="flex gap-3">
-            <Avatar className="w-8 h-8 border-2 border-border/50">
-              <AvatarFallback className="bg-secondary text-secondary-foreground">
-                ?
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              username="?"
+              size="sm"
+            />
             <div className="bg-chat-bubble-other p-3 rounded-2xl backdrop-blur-xl">
               <div className="flex gap-1">
                 <div className="w-2 h-2 bg-chat-typing rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -273,6 +278,15 @@ export const ChatInterface = () => {
           </Button>
         </div>
       </div>
+
+      {/* User Profile Modal */}
+      {selectedUserId && (
+        <UserProfileModal
+          isOpen={!!selectedUserId}
+          onClose={() => setSelectedUserId(null)}
+          userId={selectedUserId}
+        />
+      )}
     </div>
   );
 };
