@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Camera, Edit2, Save, X } from 'lucide-react';
+import { ArrowLeft, Camera, Edit2, Save, X, MapPin, Calendar, Award, Palette } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,6 @@ export const Profile: React.FC = () => {
 
   const fetchProfile = useCallback(async () => {
     if (!user) return;
-
     setIsLoading(true);
     setError('');
 
@@ -49,7 +48,6 @@ export const Profile: React.FC = () => {
         .single();
 
       if (error) {
-        // If profile doesn't exist, create it
         if (error.code === 'PGRST116') {
           const { data: newProfile, error: createError } = await supabase
             .from('profile')
@@ -63,7 +61,6 @@ export const Profile: React.FC = () => {
             .single();
 
           if (createError) throw createError;
-          
           setProfile(newProfile);
           setDisplayName(newProfile.display_name || newProfile.username);
           setUsername(newProfile.username);
@@ -100,7 +97,6 @@ export const Profile: React.FC = () => {
     setError('');
 
     try {
-      // Delete old image if exists
       if (profile?.profile_picture) {
         const oldFileName = profile.profile_picture.split('/').pop();
         if (oldFileName) {
@@ -110,22 +106,19 @@ export const Profile: React.FC = () => {
         }
       }
 
-      // Upload new image
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('profile-pictures')
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('profile-pictures')
         .getPublicUrl(fileName);
 
-      // Update profile with new image URL
       const { error: updateError } = await supabase
         .from('profile')
         .update({ profile_picture: publicUrl })
@@ -135,7 +128,6 @@ export const Profile: React.FC = () => {
 
       setProfile(prev => prev ? { ...prev, profile_picture: publicUrl } : prev);
       setSuccess('Profile picture updated successfully!');
-      
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Error uploading image:', err);
@@ -183,7 +175,6 @@ export const Profile: React.FC = () => {
 
       setSuccess('Profile updated successfully!');
       setIsEditing(false);
-      
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Error saving profile:', err);
@@ -201,40 +192,43 @@ export const Profile: React.FC = () => {
 
   if (isLoading && !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
+      <div className="min-h-screen bg-gradient-primary flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-primary relative">
-      {/* Overlay */}
+    <div className="min-h-screen bg-gradient-primary relative overflow-hidden">
+      {/* Background decorations */}
       <div className="absolute inset-0 bg-gradient-secondary opacity-30" />
-
-      {/* Content */}
+      <div className="absolute top-0 left-0 w-72 h-72 bg-primary/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+      
       <div className="relative z-10">
-        {/* Header */}
-        <div className="bg-white border-b sticky top-0 z-10">
+        {/* Header with glassmorphism */}
+        <div className="bg-card/10 backdrop-blur-xl border-b border-border/20 sticky top-0 z-20">
           <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate('/')}
+                className="hover:bg-white/10 text-white"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <h1 className="text-xl font-semibold">Profile</h1>
+              <h1 className="text-xl font-bold text-white">Profile</h1>
             </div>
+            
             <div className="flex items-center gap-2">
               {!isEditing ? (
                 <Button
                   variant="outline"
                   onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-2"
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
                 >
-                  <Edit2 className="h-4 w-4" />
+                  <Edit2 className="h-4 w-4 mr-2" />
                   Edit
                 </Button>
               ) : (
@@ -248,15 +242,16 @@ export const Profile: React.FC = () => {
                       setBio(profile?.bio || '');
                       setError('');
                     }}
+                    className="bg-red-500/20 border-red-500/30 text-white hover:bg-red-500/30"
                   >
                     <X className="h-4 w-4" />
                   </Button>
                   <Button
                     onClick={handleSaveProfile}
                     disabled={isSaving}
-                    className="flex items-center gap-2"
+                    className="bg-gradient-primary hover:opacity-90 text-white"
                   >
-                    <Save className="h-4 w-4" />
+                    <Save className="h-4 w-4 mr-2" />
                     {isSaving ? 'Saving...' : 'Save'}
                   </Button>
                 </div>
@@ -268,31 +263,40 @@ export const Profile: React.FC = () => {
         {/* Content */}
         <div className="max-w-4xl mx-auto p-6">
           {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertDescription>{error}</AlertDescription>
+            <Alert variant="destructive" className="mb-6 bg-red-500/20 border-red-500/30 backdrop-blur-sm">
+              <AlertDescription className="text-red-100">{error}</AlertDescription>
             </Alert>
           )}
 
           {success && (
-            <Alert className="mb-6">
-              <AlertDescription>{success}</AlertDescription>
+            <Alert className="mb-6 bg-green-500/20 border-green-500/30 backdrop-blur-sm">
+              <AlertDescription className="text-green-100">{success}</AlertDescription>
             </Alert>
           )}
 
           {profile && (
-            <div className="bg-white rounded-lg shadow-sm">
-              {/* Profile Header */}
-              <div className="p-8">
-                <div className="flex flex-col md:flex-row gap-8">
+            <div className="space-y-6">
+              {/* Main Profile Card */}
+              <div className="bg-card/10 backdrop-blur-xl border border-border/20 rounded-2xl overflow-hidden">
+                {/* Cover Area */}
+                <div className="h-32 bg-gradient-accent relative">
+                  <div className="absolute inset-0 bg-black/20" />
+                </div>
+
+                {/* Profile Content */}
+                <div className="px-8 pb-8 -mt-16 relative">
                   {/* Profile Picture */}
-                  <div className="flex flex-col items-center">
+                  <div className="flex justify-center mb-6">
                     <div className="relative">
-                      <UserAvatar
-                        profilePicture={profile.profile_picture || undefined}
-                        username={profile.username}
-                        size="lg"
-                      />
-                      <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 rounded-full p-2 cursor-pointer shadow-lg">
+                      <div className="w-32 h-32 rounded-full border-4 border-white/20 overflow-hidden bg-white/10 backdrop-blur-sm">
+                        <UserAvatar
+                          profilePicture={profile.profile_picture || undefined}
+                          username={profile.username}
+                          size="lg"
+                          className="w-full h-full"
+                        />
+                      </div>
+                      <label className="absolute bottom-2 right-2 bg-gradient-primary hover:opacity-90 rounded-full p-3 cursor-pointer shadow-lg transition-all duration-300 border-2 border-white/20">
                         <Camera className="h-4 w-4 text-white" />
                         <input
                           type="file"
@@ -306,109 +310,109 @@ export const Profile: React.FC = () => {
                   </div>
 
                   {/* Profile Info */}
-                  <div className="flex-1 space-y-4">
+                  <div className="text-center space-y-4">
+                    {/* Name */}
+                    {isEditing ? (
+                      <div className="space-y-2 max-w-md mx-auto">
+                        <Label className="text-white/80">Display Name</Label>
+                        <Input
+                          value={displayName}
+                          onChange={(e) => setDisplayName(e.target.value)}
+                          placeholder="Enter your display name"
+                          className="bg-white/10 border-white/20 text-white placeholder:text-white/50 backdrop-blur-sm"
+                        />
+                      </div>
+                    ) : (
+                      <h2 className="text-3xl font-bold text-white">
+                        {profile.display_name || profile.username}
+                      </h2>
+                    )}
+
                     {/* Username */}
-                    <div>
-                      {isEditing ? (
-                        <div>
-                          <Label htmlFor="username">Username</Label>
-                          <Input
-                            id="username"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            placeholder="Enter your username"
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <h2 className="text-2xl font-bold">{profile.username}</h2>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex gap-6">
-                      <div className="text-center">
-                        <div className="font-bold">0</div>
-                        <div className="text-sm text-gray-500">Posts</div>
+                    {isEditing ? (
+                      <div className="space-y-2 max-w-md mx-auto">
+                        <Label className="text-white/80">Username</Label>
+                        <Input
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="Enter your username"
+                          className="bg-white/10 border-white/20 text-white placeholder:text-white/50 backdrop-blur-sm"
+                        />
                       </div>
-                      <div className="text-center">
-                        <div className="font-bold">0</div>
-                        <div className="text-sm text-gray-500">Friends</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-bold">0</div>
-                        <div className="text-sm text-gray-500">Rooms</div>
-                      </div>
-                    </div>
-
-                    {/* Display Name */}
-                    <div>
-                      {isEditing ? (
-                        <div>
-                          <Label htmlFor="displayName">Display Name</Label>
-                          <Input
-                            id="displayName"
-                            value={displayName}
-                            onChange={(e) => setDisplayName(e.target.value)}
-                            placeholder="Enter your display name"
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="font-semibold">{profile.display_name || profile.username}</div>
-                        </div>
-                      )}
-                    </div>
+                    ) : (
+                      <p className="text-white/70 text-lg">@{profile.username}</p>
+                    )}
 
                     {/* Bio */}
-                    <div>
-                      {isEditing ? (
-                        <div>
-                          <Label htmlFor="bio">Bio</Label>
-                          <Textarea
-                            id="bio"
-                            value={bio}
-                            onChange={(e) => setBio(e.target.value)}
-                            placeholder="Write something about yourself..."
-                            rows={3}
-                          />
-                        </div>
-                      ) : (
-                        <div className="text-gray-600">
-                          {profile.bio || 'No bio yet...'}
-                        </div>
-                      )}
+                    {isEditing ? (
+                      <div className="space-y-2 max-w-md mx-auto">
+                        <Label className="text-white/80">Bio</Label>
+                        <Textarea
+                          value={bio}
+                          onChange={(e) => setBio(e.target.value)}
+                          placeholder="Write something about yourself..."
+                          rows={3}
+                          className="bg-white/10 border-white/20 text-white placeholder:text-white/50 backdrop-blur-sm resize-none"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-white/80 max-w-md mx-auto">
+                        {profile.bio || "No bio yet... ✨"}
+                      </p>
+                    )}
+
+                    {/* Stats */}
+                    <div className="flex justify-center gap-8 pt-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">0</div>
+                        <div className="text-sm text-white/60">Posts</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">0</div>
+                        <div className="text-sm text-white/60">Friends</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">0</div>
+                        <div className="text-sm text-white/60">Rooms</div>
+                      </div>
+                    </div>
+
+                    {/* Member Since */}
+                    <div className="flex items-center justify-center gap-2 text-white/60 text-sm pt-2">
+                      <Calendar className="h-4 w-4" />
+                      Member since {new Date(profile.created_at).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'long' 
+                      })}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Account Info */}
-              <div className="border-t p-6">
-                <h3 className="text-lg font-semibold mb-4">Account Information</h3>
-                <div className="grid md:grid-cols-2 gap-4">
+              {/* Account Info Card */}
+              <div className="bg-card/10 backdrop-blur-xl border border-border/20 rounded-2xl p-6">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Award className="h-5 w-5 text-primary" />
+                  Account Information
+                </h3>
+                <div className="space-y-4">
                   <div>
-                    <Label>Email</Label>
-                    <Input value={profile.email} disabled className="bg-gray-50" />
-                  </div>
-                  <div>
-                    <Label>Member Since</Label>
-                    <Input
-                      value={new Date(profile.created_at).toLocaleDateString()}
-                      disabled
-                      className="bg-gray-50"
+                    <Label className="text-white/80">Email</Label>
+                    <Input 
+                      value={profile.email} 
+                      disabled 
+                      className="bg-white/5 border-white/10 text-white/70 cursor-not-allowed"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="border-t p-6">
+              {/* Sign Out */}
+              <div className="flex justify-center">
                 <Button
                   variant="destructive"
                   onClick={handleSignOut}
-                  className="w-full md:w-auto"
+                  className="bg-red-600/80 hover:bg-red-600 backdrop-blur-sm px-8 py-3 text-white font-semibold"
                 >
                   Sign Out
                 </Button>
