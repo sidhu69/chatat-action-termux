@@ -47,27 +47,35 @@ export const Profile: React.FC = () => {
         .eq('id', user.id)
         .single();
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          const { data: newProfile, error: createError } = await supabase
-            .from('profile')
-            .insert({
-              id: user.id,
-              email: user.email!,
-              username: user.email!.split('@')[0],
-              display_name: user.email!.split('@')[0],
-            })
-            .select('*')
-            .single();
+      if (error && error.code === 'PGRST116') {
+        // Profile doesn't exist, create it now
+        const username = user.email?.split('@')[0] || 'user';
+        const { data: newProfile, error: createError } = await supabase
+          .from('profile')
+          .upsert({
+            id: user.id,
+            email: user.email!,
+            username: username,
+            display_name: username,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'id'
+          })
+          .select('*')
+          .single();
 
-          if (createError) throw createError;
-          setProfile(newProfile);
-          setDisplayName(newProfile.display_name || newProfile.username);
-          setUsername(newProfile.username);
-          setBio(newProfile.bio || '');
-        } else {
-          throw error;
+        if (createError) {
+          console.error('Error creating profile:', createError);
+          throw createError;
         }
+        
+        setProfile(newProfile);
+        setDisplayName(newProfile.display_name || newProfile.username);
+        setUsername(newProfile.username);
+        setBio(newProfile.bio || '');
+      } else if (error) {
+        throw error;
       } else {
         setProfile(data);
         setDisplayName(data.display_name || data.username);
@@ -75,9 +83,8 @@ export const Profile: React.FC = () => {
         setBio(data.bio || '');
       }
     } catch (err) {
-      console.error('Error fetching profile:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Failed to load profile: ${errorMessage}`);
+      console.error('Error with profile:', err);
+      setError(`Failed to load profile: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -204,7 +211,7 @@ export const Profile: React.FC = () => {
       <div className="absolute inset-0 bg-gradient-secondary opacity-30" />
       <div className="absolute top-0 left-0 w-72 h-72 bg-primary/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent/20 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
-      
+
       <div className="relative z-10">
         {/* Header with glassmorphism */}
         <div className="bg-card/10 backdrop-blur-xl border-b border-border/20 sticky top-0 z-20">
@@ -220,7 +227,7 @@ export const Profile: React.FC = () => {
               </Button>
               <h1 className="text-xl font-bold text-white">Profile</h1>
             </div>
-            
+
             <div className="flex items-center gap-2">
               {!isEditing ? (
                 <Button
@@ -376,46 +383,64 @@ export const Profile: React.FC = () => {
                         <div className="text-sm text-white/60">Rooms</div>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
 
-                    {/* Member Since */}
-                    <div className="flex items-center justify-center gap-2 text-white/60 text-sm pt-2">
-                      <Calendar className="h-4 w-4" />
-                      Member since {new Date(profile.created_at).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long' 
-                      })}
+              {/* Additional Cards */}
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Activity Card */}
+                <div className="bg-card/10 backdrop-blur-xl border border-border/20 rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Award className="h-5 w-5 text-primary" />
+                    <h3 className="text-lg font-semibold text-white">Activity</h3>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-white/70">Messages sent</span>
+                      <span className="text-white font-semibold">0</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-white/70">Rooms joined</span>
+                      <span className="text-white font-semibold">0</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-white/70">Member since</span>
+                      <span className="text-white font-semibold">
+                        {new Date(profile.created_at).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Account Info Card */}
-              <div className="bg-card/10 backdrop-blur-xl border border-border/20 rounded-2xl p-6">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Award className="h-5 w-5 text-primary" />
-                  Account Information
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-white/80">Email</Label>
-                    <Input 
-                      value={profile.email} 
-                      disabled 
-                      className="bg-white/5 border-white/10 text-white/70 cursor-not-allowed"
-                    />
+                {/* Settings Card */}
+                <div className="bg-card/10 backdrop-blur-xl border border-border/20 rounded-2xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Palette className="h-5 w-5 text-primary" />
+                    <h3 className="text-lg font-semibold text-white">Settings</h3>
+                  </div>
+                  <div className="space-y-3">
+                    <Button
+                      variant="outline"
+                      className="w-full bg-white/5 border-white/20 text-white hover:bg-white/10"
+                    >
+                      Theme Preferences
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full bg-white/5 border-white/20 text-white hover:bg-white/10"
+                    >
+                      Notification Settings
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleSignOut}
+                      className="w-full bg-red-500/20 border-red-500/30 text-red-200 hover:bg-red-500/30"
+                    >
+                      Sign Out
+                    </Button>
                   </div>
                 </div>
-              </div>
-
-              {/* Sign Out */}
-              <div className="flex justify-center">
-                <Button
-                  variant="destructive"
-                  onClick={handleSignOut}
-                  className="bg-red-600/80 hover:bg-red-600 backdrop-blur-sm px-8 py-3 text-white font-semibold"
-                >
-                  Sign Out
-                </Button>
               </div>
             </div>
           )}
