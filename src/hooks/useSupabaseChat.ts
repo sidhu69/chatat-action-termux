@@ -215,13 +215,13 @@ export const useSupabaseChat = () => {
           setCurrentRoom(prev => {
             if (prev && prev.id === roomId) {
               // Check if message already exists to prevent duplicates
-              const messageExists = prev.messages.some(msg => 
-                msg.id === newMessage.id || 
-                (msg.content === newMessage.content && 
-                 msg.userId === newMessage.userId && 
+              const messageExists = prev.messages.some(msg =>
+                msg.id === newMessage.id ||
+                (msg.content === newMessage.content &&
+                 msg.userId === newMessage.userId &&
                  Math.abs(msg.timestamp.getTime() - newMessage.timestamp.getTime()) < 5000)
               );
-              
+
               if (!messageExists) {
                 console.log('Adding new message to room:', newMessage);
                 return {
@@ -272,7 +272,7 @@ export const useSupabaseChat = () => {
         (data || []).map(async (room) => {
           const { data: messages, error: messagesError } = await supabase
             .from('messages')
-            .select('*, profile!inner(display_name, profile_picture)')
+            .select('*')
             .eq('room_id', room.id)
             .order('created_at', { ascending: true });
 
@@ -298,8 +298,8 @@ export const useSupabaseChat = () => {
               userId: msg.user_id,
               timestamp: new Date(msg.created_at),
               type: 'text',
-              display_name: msg.profile?.display_name || msg.username,
-              profile_picture: msg.profile?.profile_picture || null,
+              display_name: msg.display_name || msg.username,
+              profile_picture: msg.profile_picture || null,
             })),
             createdAt: new Date(room.created_at),
           };
@@ -428,7 +428,7 @@ export const useSupabaseChat = () => {
       // Fetch messages for this room with profile information
       const { data: messages, error: messagesError } = await supabase
         .from('messages')
-        .select('*, profile!inner(display_name, profile_picture)')
+        .select('*')
         .eq('room_id', data.id)
         .order('created_at', { ascending: true });
 
@@ -449,8 +449,8 @@ export const useSupabaseChat = () => {
           userId: msg.user_id,
           timestamp: new Date(msg.created_at),
           type: 'text',
-          display_name: msg.profile?.display_name || msg.username,
-          profile_picture: msg.profile?.profile_picture || null,
+          display_name: msg.display_name || msg.username,
+          profile_picture: msg.profile_picture || null,
         })),
         createdAt: new Date(data.created_at),
       };
@@ -458,94 +458,59 @@ export const useSupabaseChat = () => {
       setCurrentRoom(room);
       setIsConnected(true);
 
-      // Start tracking presence and messages for this room
-      console.log('Setting up channels for room joiner');
+      // Start tracking presence and messages for this user
       trackRoomParticipants(room.id, user);
       setupMessageSubscription(room.id);
 
-      console.log(`Successfully joined room ${room.name}`);
+      toast({
+        title: "Success",
+        description: `Joined ${room.name} successfully!`,
+      });
+
       return room;
     } catch (error) {
-      console.error('Error joining room:', error);
+      console.error('Full error details:', error);
       toast({
         title: "Error",
-        description: "Failed to join room",
+        description: `Failed to join room: ${(error as Error).message}`,
         variant: "destructive",
       });
       return null;
     }
-  }, [toast, roomParticipants, trackRoomParticipants, setupMessageSubscription]);
+  }, [toast, trackRoomParticipants, setupMessageSubscription, roomParticipants]);
 
-  // Send a message with immediate local update
-  const sendMessage = useCallback(async (content: string, user: User, roomId: string) => {
+  // Send a message to the current room
+  const sendMessage = useCallback(async (content: string, user: User) => {
+    if (!currentRoom || !user) {
+      console.error('Cannot send message: no current room or user');
+      return false;
+    }
+
     try {
-      console.log(`Sending message from ${user.username} to room ${roomId}:`, content);
+      console.log('Sending message:', { content, room: currentRoom.name, user: user.username });
 
-      // Get user profile for message
-      const { data: userProfile } = await supabase
-        .from('profile')
-        .select('display_name, profile_picture')
-        .eq('id', user.id)
-        .single();
-
-      // Create optimistic message for immediate UI update
-      const tempId = `temp-${Date.now()}`;
-      const optimisticMessage: Message = {
-        id: tempId,
-        content,
-        username: user.username,
-        userId: user.id,
-        timestamp: new Date(),
-        type: 'text',
-        display_name: userProfile?.display_name || user.username,
-        profile_picture: userProfile?.profile_picture || null,
-      };
-
-      // Add optimistic message immediately
-      setCurrentRoom(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, optimisticMessage],
-      } : null);
-
-      // Send to database
       const { data, error } = await supabase
         .from('messages')
         .insert({
           content,
-          username: user.username,
+          room_id: currentRoom.id,
           user_id: user.id,
-          room_id: roomId,
+          username: user.username,
+          display_name: user.display_name || user.username,
+          profile_picture: user.profile_picture || null,
         })
         .select()
         .single();
 
-      if (error) throw error;
-
-      // Replace optimistic message with real one
-      setCurrentRoom(prev => prev ? {
-        ...prev,
-        messages: prev.messages.map(msg => 
-          msg.id === tempId 
-            ? {
-                ...msg,
-                id: data.id,
-                timestamp: new Date(data.created_at),
-              }
-            : msg
-        ),
-      } : null);
+      if (error) {
+        console.error('Error sending message:', error);
+        throw error;
+      }
 
       console.log('Message sent successfully:', data);
       return true;
     } catch (error) {
-      console.error('Error sending message:', error);
-      
-      // Remove failed optimistic message
-      setCurrentRoom(prev => prev ? {
-        ...prev,
-        messages: prev.messages.filter(msg => !msg.id.toString().startsWith('temp-')),
-      } : null);
-      
+      console.error('Failed to send message:', error);
       toast({
         title: "Error",
         description: "Failed to send message",
@@ -553,94 +518,59 @@ export const useSupabaseChat = () => {
       });
       return false;
     }
-  }, [toast]);
+  }, [currentRoom, toast]);
 
-  // Enhanced leave room function to properly cleanup presence and messages
-  const leaveRoom = useCallback(() => {
-    if (currentRoom) {
-      console.log(`Leaving room ${currentRoom.id}`);
+  // Leave the current room
+  const leaveRoom = useCallback(async () => {
+    if (!currentRoom) return;
 
-      // Cleanup presence channel
-      if (presenceChannels[currentRoom.id]) {
-        console.log('Cleaning up presence channel');
-        presenceChannels[currentRoom.id].untrack();
-        supabase.removeChannel(presenceChannels[currentRoom.id]);
+    const roomId = currentRoom.id;
+
+    try {
+      // Unsubscribe from presence channel
+      if (presenceChannels[roomId]) {
+        await presenceChannels[roomId].unsubscribe();
+        setPresenceChannels(prev => {
+          const updated = { ...prev };
+          delete updated[roomId];
+          return updated;
+        });
       }
 
-      // Cleanup message channel
-      if (messageChannels[currentRoom.id]) {
-        console.log('Cleaning up message channel');
-        supabase.removeChannel(messageChannels[currentRoom.id]);
+      // Unsubscribe from message channel
+      if (messageChannels[roomId]) {
+        await messageChannels[roomId].unsubscribe();
+        setMessageChannels(prev => {
+          const updated = { ...prev };
+          delete updated[roomId];
+          return updated;
+        });
       }
 
-      // Remove from channels
-      setPresenceChannels(prev => {
-        const newChannels = { ...prev };
-        delete newChannels[currentRoom.id];
-        return newChannels;
-      });
+      // Clear current room
+      setCurrentRoom(null);
+      setIsConnected(false);
 
-      setMessageChannels(prev => {
-        const newChannels = { ...prev };
-        delete newChannels[currentRoom.id];
-        return newChannels;
-      });
-
-      // Clear participants for this room
-      setRoomParticipants(prev => {
-        const newParticipants = { ...prev };
-        delete newParticipants[currentRoom.id];
-        return newParticipants;
-      });
-
-      // Trigger cleanup check after leaving
-      setTimeout(() => {
-        cleanupEmptyRooms();
-      }, 5000); // Wait 5 seconds after leaving to check for cleanup
+      console.log(`Left room: ${currentRoom.name}`);
+    } catch (error) {
+      console.error('Error leaving room:', error);
     }
+  }, [currentRoom, presenceChannels, messageChannels]);
 
-    setCurrentRoom(null);
-    setIsConnected(false);
-  }, [currentRoom, presenceChannels, messageChannels, cleanupEmptyRooms]);
-
-  // Initialize public rooms on mount and set up periodic cleanup
+  // Initialize by fetching public rooms
   useEffect(() => {
     fetchPublicRooms();
-    
-    // Set up periodic cleanup every 10 minutes
-    const cleanupInterval = setInterval(() => {
-      cleanupEmptyRooms();
-    }, 10 * 60 * 1000); // 10 minutes
-
-    return () => {
-      clearInterval(cleanupInterval);
-    };
-  }, [fetchPublicRooms, cleanupEmptyRooms]);
-
-  // Cleanup all channels on unmount
-  useEffect(() => {
-    return () => {
-      console.log('Cleaning up all channels on unmount');
-      Object.values(presenceChannels).forEach(channel => {
-        channel.untrack();
-        supabase.removeChannel(channel);
-      });
-      Object.values(messageChannels).forEach(channel => {
-        supabase.removeChannel(channel);
-      });
-    };
-  }, [presenceChannels, messageChannels]);
+  }, [fetchPublicRooms]);
 
   return {
     rooms,
     currentRoom,
     isConnected,
+    roomParticipants,
     createRoom,
     joinRoom,
+    leaveRoom,
     sendMessage,
-    setCurrentRoom: leaveRoom,
-    setIsConnected,
     fetchPublicRooms,
-    roomParticipants,
   };
 };
