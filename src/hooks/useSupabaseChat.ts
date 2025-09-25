@@ -207,18 +207,29 @@ export const useSupabaseChat = () => {
             userId: payload.new.user_id,
             timestamp: new Date(payload.new.created_at),
             type: 'text',
+            display_name: payload.new.display_name || payload.new.username,
+            profile_picture: payload.new.profile_picture || null,
           };
 
           // Update current room if it matches
           setCurrentRoom(prev => {
             if (prev && prev.id === roomId) {
               // Check if message already exists to prevent duplicates
-              const messageExists = prev.messages.some(msg => msg.id === newMessage.id);
+              const messageExists = prev.messages.some(msg => 
+                msg.id === newMessage.id || 
+                (msg.content === newMessage.content && 
+                 msg.userId === newMessage.userId && 
+                 Math.abs(msg.timestamp.getTime() - newMessage.timestamp.getTime()) < 5000)
+              );
+              
               if (!messageExists) {
+                console.log('Adding new message to room:', newMessage);
                 return {
                   ...prev,
                   messages: [...prev.messages, newMessage],
                 };
+              } else {
+                console.log('Message already exists, skipping duplicate');
               }
             }
             return prev;
@@ -261,7 +272,7 @@ export const useSupabaseChat = () => {
         (data || []).map(async (room) => {
           const { data: messages, error: messagesError } = await supabase
             .from('messages')
-            .select('*')
+            .select('*, profile!inner(display_name, profile_picture)')
             .eq('room_id', room.id)
             .order('created_at', { ascending: true });
 
@@ -287,6 +298,8 @@ export const useSupabaseChat = () => {
               userId: msg.user_id,
               timestamp: new Date(msg.created_at),
               type: 'text',
+              display_name: msg.profile?.display_name || msg.username,
+              profile_picture: msg.profile?.profile_picture || null,
             })),
             createdAt: new Date(room.created_at),
           };
@@ -316,35 +329,33 @@ export const useSupabaseChat = () => {
   }, [roomParticipants]);
 
   // Create a new room and automatically join it
-const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
-  try {
-    // Validate user ID is a proper UUID
-    if (!user.id || typeof user.id !== 'string') {
-      throw new Error('Invalid user ID');
-    }
+  const createRoom = useCallback(async (name: string, isPublic: boolean, user: User) => {
+    try {
+      // Validate user ID is a proper UUID
+      if (!user.id || typeof user.id !== 'string') {
+        throw new Error('Invalid user ID');
+      }
 
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    console.log('Creating room with:', { name, code, isPublic, userId: user.id });
-    console.log('User ID type:', typeof user.id, 'User ID value:', user.id);
+      console.log('Creating room with:', { name, code, isPublic, userId: user.id });
+      console.log('User ID type:', typeof user.id, 'User ID value:', user.id);
 
-    const { data, error } = await supabase
-      .from('chat_rooms')
-      .insert({
-        name,
-        code,
-        is_public: isPublic,
-        created_by: user.id,
-      })
-      .select()
-      .single();
+      const { data, error } = await supabase
+        .from('chat_rooms')
+        .insert({
+          name,
+          code,
+          is_public: isPublic,
+          created_by: user.id,
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Supabase error details:', error);
-      throw error;
-    }
-
-    // ... rest of your createRoom function
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
 
       console.log('Room created successfully:', data);
 
@@ -414,10 +425,10 @@ const createRoom = useCallback(async (name: string, isPublic: boolean, user: Use
         throw error;
       }
 
-      // Fetch messages for this room
+      // Fetch messages for this room with profile information
       const { data: messages, error: messagesError } = await supabase
         .from('messages')
-        .select('*')
+        .select('*, profile!inner(display_name, profile_picture)')
         .eq('room_id', data.id)
         .order('created_at', { ascending: true });
 
@@ -438,6 +449,8 @@ const createRoom = useCallback(async (name: string, isPublic: boolean, user: Use
           userId: msg.user_id,
           timestamp: new Date(msg.created_at),
           type: 'text',
+          display_name: msg.profile?.display_name || msg.username,
+          profile_picture: msg.profile?.profile_picture || null,
         })),
         createdAt: new Date(data.created_at),
       };
@@ -468,55 +481,55 @@ const createRoom = useCallback(async (name: string, isPublic: boolean, user: Use
     try {
       console.log(`Sending message from ${user.username} to room ${roomId}:`, content);
 
+      // Get user profile for message
+      const { data: userProfile } = await supabase
+        .from('profile')
+        .select('display_name, profile_picture')
+        .eq('id', user.id)
+        .single();
+
       // Create optimistic message for immediate UI update
-      const tempMessage: Message = {
-        id: `temp-${Date.now()}`,
-        content: content,
+      const tempId = `temp-${Date.now()}`;
+      const optimisticMessage: Message = {
+        id: tempId,
+        content,
         username: user.username,
         userId: user.id,
         timestamp: new Date(),
         type: 'text',
+        display_name: userProfile?.display_name || user.username,
+        profile_picture: userProfile?.profile_picture || null,
       };
 
-      // Add message to current room immediately for better UX
+      // Add optimistic message immediately
       setCurrentRoom(prev => prev ? {
         ...prev,
-        messages: [...prev.messages, tempMessage],
+        messages: [...prev.messages, optimisticMessage],
       } : null);
 
+      // Send to database
       const { data, error } = await supabase
         .from('messages')
         .insert({
-          room_id: roomId,
-          user_id: user.id,
-          username: user.username,
           content,
+          username: user.username,
+          user_id: user.id,
+          room_id: roomId,
         })
         .select()
         .single();
 
-      if (error) {
-        console.error('Error sending message:', error);
-        // Remove the temp message on error
-        setCurrentRoom(prev => prev ? {
-          ...prev,
-          messages: prev.messages.filter(msg => msg.id !== tempMessage.id),
-        } : null);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Replace temp message with real message
+      // Replace optimistic message with real one
       setCurrentRoom(prev => prev ? {
         ...prev,
-        messages: prev.messages.map(msg =>
-          msg.id === tempMessage.id
+        messages: prev.messages.map(msg => 
+          msg.id === tempId 
             ? {
+                ...msg,
                 id: data.id,
-                content: data.content,
-                username: data.username,
-                userId: data.user_id,
                 timestamp: new Date(data.created_at),
-                type: 'text' as const,
               }
             : msg
         ),
@@ -526,6 +539,13 @@ const createRoom = useCallback(async (name: string, isPublic: boolean, user: Use
       return true;
     } catch (error) {
       console.error('Error sending message:', error);
+      
+      // Remove failed optimistic message
+      setCurrentRoom(prev => prev ? {
+        ...prev,
+        messages: prev.messages.filter(msg => !msg.id.toString().startsWith('temp-')),
+      } : null);
+      
       toast({
         title: "Error",
         description: "Failed to send message",
