@@ -425,7 +425,7 @@ export const useSupabaseChat = () => {
         throw error;
       }
 
-      // Fetch messages for this room with profile information
+      // Fetch messages for this room
       const { data: messages, error: messagesError } = await supabase
         .from('messages')
         .select('*')
