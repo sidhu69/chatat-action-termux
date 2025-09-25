@@ -56,17 +56,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (error) throw error;
 
-    // Insert user data into profile table
+    // Insert user data into profile table - DON'T throw error if it fails
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('profile')
-        .insert({
-          id: data.user.id,
-          email: data.user.email!,
-          username,
-        });
+      try {
+        const { error: profileError } = await supabase
+          .from('profile')
+          .insert({
+            id: data.user.id,
+            email: data.user.email!,
+            username,
+            display_name: username,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
 
-      if (profileError) throw profileError;
+        if (profileError) {
+          console.warn('Profile creation failed, will be created on first profile visit:', profileError);
+          // Don't throw - let user continue and profile will be created later
+        }
+      } catch (profileError) {
+        console.warn('Profile creation failed, will be created on first profile visit:', profileError);
+        // Don't throw - let user continue
+      }
     }
 
     return { user: data.user, session: data.session };
