@@ -10,13 +10,8 @@ export const ProfileButton: React.FC = () => {
   const location = useLocation();
   const { supabaseChat } = useChat();
 
-  // Hide profile button when:
-  // 1. User is not logged in
-  // 2. Not on home page (/) 
-  // 3. Currently in a chat room (when supabaseChat.currentRoom exists)
-  if (!user || 
-      location.pathname !== '/' || 
-      supabaseChat.currentRoom) {
+  // Only hide if not logged in or already on profile page
+  if (!user || location.pathname === '/profile') {
     return null;
   }
 
