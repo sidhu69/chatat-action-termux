@@ -9,7 +9,7 @@ import { ProfileButton } from "@/components/profile/ProfileButton";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
-import UserProfile from "./pages/UserProfile"; // Add this import
+import UserProfile from "./pages/UserProfile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
