@@ -69,12 +69,12 @@ export const ChatInterface = () => {
   };
 
   const handleLeaveRoom = () => {
-    supabaseChat.setCurrentRoom();
-    toast({
-      title: "Left room",
-      description: "You have left the chat room",
-    });
-  };
+  supabaseChat.leaveRoom();  // ✅ CORRECT METHOD
+  toast({
+    title: "Left room",
+    description: "You have left the chat room",
+  });
+};
 
   const copyRoomCode = () => {
     if (supabaseChat.currentRoom) {
