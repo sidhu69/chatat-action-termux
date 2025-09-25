@@ -97,53 +97,58 @@ export const Profile: React.FC = () => {
   }, [user, fetchProfile]);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user) return;
+  const file = event.target.files?.[0];
+  if (!file || !user) return;
 
-    setIsLoading(true);
-    setError('');
+  setIsLoading(true);
+  setError('');
 
-    try {
-      if (profile?.profile_picture) {
-        const oldFileName = profile.profile_picture.split('/').pop();
-        if (oldFileName) {
-          await supabase.storage
-            .from('profile-pictures')
-            .remove([oldFileName]);
-        }
+  try {
+    // Delete old image if exists
+    if (profile?.profile_picture) {
+      const oldPath = profile.profile_picture?.split('/profile-pictures/')[1];
+      if (oldPath) {
+        await supabase.storage.from('profile-pictures').remove([oldPath]);
       }
-
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('profile-pictures')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-pictures')
-        .getPublicUrl(fileName);
-
-      const { error: updateError } = await supabase
-        .from('profile')
-        .update({ profile_picture: publicUrl })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
-
-      setProfile(prev => prev ? { ...prev, profile_picture: publicUrl } : prev);
-      setSuccess('Profile picture updated successfully!');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error uploading image:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(`Failed to upload image: ${errorMessage}`);
-    } finally {
-      setIsLoading(false);
     }
-  };
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+    const arrayBuffer = await file.arrayBuffer();
+
+    // Upload as Blob with contentType
+    const { error: uploadError } = await supabase.storage
+      .from('profile-pictures')
+      .upload(fileName, new Blob([arrayBuffer]), {
+        contentType: file.type,
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+
+    // Get public URL safely
+    const { data } = supabase.storage.from('profile-pictures').getPublicUrl(fileName);
+    const publicUrl = data.publicUrl;
+
+    // Update profile in DB
+    const { error: updateError } = await supabase
+      .from('profile')
+      .update({ profile_picture: publicUrl })
+      .eq('id', user.id);
+
+    if (updateError) throw updateError;
+
+    setProfile(prev => (prev ? { ...prev, profile_picture: publicUrl } : prev));
+    setSuccess('Profile picture updated successfully!');
+    setTimeout(() => setSuccess(''), 3000);
+  } catch (err) {
+    console.error('Error uploading image:', err);
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+    setError(`Failed to upload image: ${errorMessage}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleSaveProfile = async () => {
     if (!user || !profile) return;
