@@ -1,18 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageCircle, User } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
+import { useChat } from '@/contexts/ChatContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { toast } from '@/hooks/use-toast';
 import chatHero from '@/assets/chat-hero.jpg';
 
 export const UsernameSetup = () => {
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
+  const { dispatch } = useChat();
   const { user } = useAuth();
+
+  useEffect(() => {
+    // Auto-populate username from email if available
+    if (user?.email) {
+      setUsername(user.email.split('@')[0]);
+    }
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,30 +27,39 @@ export const UsernameSetup = () => {
 
     setLoading(true);
     try {
+      // Update or create profile
       const { error } = await supabase
         .from('profile')
-        .update({
+        .upsert({
+          id: user.id,
+          email: user.email!,
           username: username.trim(),
-          display_name: displayName.trim() || username.trim(),
+          display_name: username.trim(),
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+        });
 
       if (error) throw error;
 
-      toast({
-        title: "Profile updated!",
-        description: "You can now start chatting",
+      // Set the user in chat context
+      dispatch({
+        type: 'SET_USER',
+        payload: {
+          id: user.id,
+          username: username.trim(),
+          display_name: username.trim(),
+        }
       });
 
-      // Reload the page to trigger profile loading
-      window.location.reload();
     } catch (error) {
-      console.error('Error updating profile:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update profile. Please try again.",
-        variant: "destructive",
+      console.error('Error saving username:', error);
+      // Even if database fails, set user locally so they can use the app
+      dispatch({
+        type: 'SET_USER',
+        payload: {
+          id: user.id,
+          username: username.trim(),
+          display_name: username.trim(),
+        }
       });
     } finally {
       setLoading(false);
@@ -68,10 +84,10 @@ export const UsernameSetup = () => {
           </div>
           <div>
             <CardTitle className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Complete Your Profile
+              Chatat
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
-              Set up your username to start chatting
+              Enter your username to start chatting
             </CardDescription>
           </div>
         </CardHeader>
@@ -81,7 +97,7 @@ export const UsernameSetup = () => {
             <div>
               <Input
                 type="text"
-                placeholder="Username (required)"
+                placeholder="Enter your username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="text-center text-lg py-6 bg-background/50 border-border/50 focus:bg-background transition-all duration-300"
@@ -89,29 +105,12 @@ export const UsernameSetup = () => {
                 required
               />
             </div>
-            <div>
-              <Input
-                type="text"
-                placeholder="Display name (optional)"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="text-center text-lg py-6 bg-background/50 border-border/50 focus:bg-background transition-all duration-300"
-                maxLength={30}
-              />
-            </div>
             <Button
               type="submit"
               className="w-full py-6 text-lg font-semibold bg-gradient-primary hover:opacity-90 transition-all duration-300 transform hover:scale-105"
               disabled={!username.trim() || loading}
             >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Setting up...
-                </div>
-              ) : (
-                'Start Chatting'
-              )}
+              {loading ? 'Setting up...' : 'Start Chatting'}
             </Button>
           </form>
         </CardContent>
