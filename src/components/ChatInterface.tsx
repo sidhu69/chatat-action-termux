@@ -43,24 +43,23 @@ export const ChatInterface = () => {
   }, [supabaseChat.currentRoom?.messages]);
 
   const handleSendMessage = async () => {
-    if (!message.trim() || !supabaseChat.currentRoom || !state.currentUser || isSending) return;
+  if (!message.trim() || !supabaseChat.currentRoom || !state.currentUser || isSending) return;
 
-    setIsSending(true);
-    const messageToSend = message.trim();
-    setMessage(''); // Clear input immediately
+  setIsSending(true);
+  const messageToSend = message.trim();
+  setMessage(''); // Clear input immediately
 
-    const success = await supabaseChat.sendMessage(
-      messageToSend,
-      state.currentUser,
-      supabaseChat.currentRoom.id
-    );
+  const success = await supabaseChat.sendMessage(
+    messageToSend,
+    state.currentUser
+  );
 
-    if (!success) {
-      setMessage(messageToSend); // Restore message on failure
-    }
+  if (!success) {
+    setMessage(messageToSend); // Restore message on failure
+  }
 
-    setIsSending(false);
-  };
+  setIsSending(false);
+};
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
