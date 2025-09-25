@@ -26,6 +26,7 @@ export interface Database {
           username: string;
           display_name: string;
           profile_picture?: string;
+          bio?: string;
           created_at: string;
           updated_at: string;
         };
@@ -35,6 +36,7 @@ export interface Database {
           username: string;
           display_name?: string;
           profile_picture?: string;
+          bio?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -44,6 +46,7 @@ export interface Database {
           username?: string;
           display_name?: string;
           profile_picture?: string;
+          bio?: string;
           updated_at?: string;
         };
       };
@@ -53,8 +56,8 @@ export interface Database {
           room_id: string;
           user_id: string;
           username: string;
-          display_name?: string;  // ✅ ADD THIS
-          profile_picture?: string;  // ✅ ADD THIS
+          display_name?: string;
+          profile_picture?: string;
           content: string;
           created_at: string;
         };
@@ -63,8 +66,8 @@ export interface Database {
           room_id: string;
           user_id: string;
           username: string;
-          display_name?: string;  // ✅ ADD THIS
-          profile_picture?: string;  // ✅ ADD THIS
+          display_name?: string;
+          profile_picture?: string;
           content: string;
           created_at?: string;
         };
@@ -73,13 +76,13 @@ export interface Database {
           room_id?: string;
           user_id?: string;
           username?: string;
-          display_name?: string;  // ✅ ADD THIS
-          profile_picture?: string;  // ✅ ADD THIS
+          display_name?: string;
+          profile_picture?: string;
           content?: string;
           created_at?: string;
         };
       };
-      chat_rooms: {  // ✅ ADD THIS TABLE
+      chat_rooms: {
         Row: {
           id: string;
           name: string;
